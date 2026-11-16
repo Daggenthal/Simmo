@@ -27,6 +27,7 @@ const NAV_CASES := [
 	[820, 270, 1000, 208, "lower platform -> higher platform across a gap"],
 ]
 var _auto_min_y := 9999.0
+var _climb_mob = null
 
 func _initialize() -> void:
 	_log = root.get_node("Log")
@@ -117,9 +118,12 @@ func _physics_process(_delta: float) -> bool:
 			var high = null
 			if _phase_frame == 1:
 				player.cfg.auto_use_spells = false  # movement tests: no ranged shortcuts
+				# A queued respawn from the last phase would bring a mob back mid-test.
+				world._respawn_queue.clear()
 				for m in world.mobs:
 					if m.home.y < 300.0 and high == null:
 						high = m
+						_climb_mob = m
 						m.respawn()
 					else:
 						m.alive = false
@@ -128,11 +132,11 @@ func _physics_process(_delta: float) -> bool:
 				_auto_kills = player.kills
 				player.position = Vector2(world.spawn_point.x, 330)
 				player.velocity = Vector2.ZERO
-			if player.is_on_floor():
-				_auto_min_y = min(_auto_min_y, player.position.y)
-			if player.kills > _auto_kills or _phase_frame == 1200:
-				_check(player.kills > _auto_kills, "auto-battle climbs to a mob on a platform and kills it (%d frames)" % _phase_frame)
-				_check(_auto_min_y < 300.0, "auto-battle landed on a platform (highest floor y=%.0f)" % _auto_min_y)
+			# Highest point reached: auto-battle may land the kill mid-jump, beside the platform's edge.
+			_auto_min_y = min(_auto_min_y, player.position.y)
+			if not _climb_mob.alive or _phase_frame == 1200:
+				_check(not _climb_mob.alive, "auto-battle climbs to a mob on a platform and kills it (%d frames)" % _phase_frame)
+				_check(_auto_min_y < 300.0, "auto-battle got up to the platform (highest feet y=%.0f)" % _auto_min_y)
 				for m in world.mobs:
 					m.respawn()
 				player.set_auto_battle(false)

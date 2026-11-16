@@ -45,13 +45,18 @@ func choose() -> void:
 	Log.info("Class chosen: %s" % class_id())
 	class_chosen.emit(class_id())
 
+## Card width: 150 when there's room, narrower so any number of classes fits the screen.
+func card_w() -> float:
+	var vs := get_viewport_rect().size
+	return minf(CARD.x, (vs.x - 16.0 - (ids.size() - 1) * GAP) / maxf(ids.size(), 1))
+
 func _width() -> float:
-	return ids.size() * CARD.x + (ids.size() - 1) * GAP
+	return ids.size() * card_w() + (ids.size() - 1) * GAP
 
 func card_rect(n: int) -> Rect2:
 	var vs := get_viewport_rect().size
 	var x0 := (vs.x - _width()) / 2.0
-	return Rect2(Vector2(x0 + n * (CARD.x + GAP), 50), CARD)
+	return Rect2(Vector2(x0 + n * (card_w() + GAP), 50), Vector2(card_w(), CARD.y))
 
 func details_rect() -> Rect2:
 	var vs := get_viewport_rect().size

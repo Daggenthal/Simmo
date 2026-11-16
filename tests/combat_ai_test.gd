@@ -131,7 +131,8 @@ func _physics_process(_d: float) -> bool:
 					if _mobs[k].hp < _hp0[k]:
 						hit += 1
 				_check(hit == 3, "Arcane Cataclysm hits every mob on the map, even 1100 px away and up on a platform (%d of 3)" % hit)
-				_check(_mobs[0].hp < _mobs[1].hp, "the mob in the fire cone takes extra damage")
+				# The cone is fire: the mob in it burns (damage totals vary with crits).
+				_check(_mobs[0].is_burning() and not _mobs[1].is_burning(), "the fire cone hits the mob in front (it burns), not the far one")
 				_check(not p.can_ultimate() and p.ult_cd > 50.0, "then it's on a 60 s cooldown (%.0fs left)" % p.ult_cd)
 				_goto("quake")
 		"quake":

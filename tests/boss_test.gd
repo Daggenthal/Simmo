@@ -192,6 +192,11 @@ func _check_loot_rolls(p) -> void:
 	var junk: Dictionary = GearS.make("junk", 10)
 	_check(junk.kind == "junk" and not junk.has("slot"), "junk is just junk")
 	var magic: Dictionary = GearS.make("magic", 10, ["short_sword"])
+	for k in 200:
+		var mg: Dictionary = GearS.make("magic", 10, ["short_sword"])
+		if mg.mods.size() != 2:
+			magic = mg
+			break
 	var leg: Dictionary = GearS.make("legendary", 10, ["short_sword"])
 	_check(magic.mods.size() >= 2 and magic.mods.size() <= 2, "magic gear: a base bonus plus 1 affix (%s)" % str(magic.mods))
 	_check(leg.mods.size() >= 4 and leg.name.contains("("), "legendary gear: several affixes and a unique name (%s: %s)" % [leg.name, str(leg.mods)])

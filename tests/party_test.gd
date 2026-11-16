@@ -18,6 +18,9 @@ var _kills0 := 0
 var _swings0 := 0
 var _on_perch := false
 var _ever_far := 0.0
+var _hp_track: Array = []
+var _closest := 9999.0
+var _swings_p := 0
 
 func _initialize() -> void:
 	_log = root.get_node("Log")
@@ -99,8 +102,8 @@ func _physics_process(_d: float) -> bool:
 				_check(_tank.max_hp > p.max_hp and _tank.weapon_key == "iron_hammer", "tank has more HP (%d vs %d) and a hammer" % [_tank.max_hp, p.max_hp])
 				_check(_healer.spells.has("heal") and not p.spells.has("heal"), "healer knows Heal; the player's skill bar doesn't get it")
 				_check(_ranged.weapon.get("thrown", false), "ranged sim throws kunai")
-				_check(_tank.class_id == "warrior" and _healer.class_id == "mage" and _healer.weapon_key == "oak_staff" and _ranged.class_id == "rogue",
-					"sims have classes: Warrior tank, Mage healer with a staff, Rogue ranged")
+				_check(_tank.class_id == "warrior" and _healer.class_id == "priest" and _healer.weapon_key == "holy_scepter" and _ranged.class_id == "rogue",
+					"Simmos have classes: Warrior tank, Priest healer with a scepter, Rogue ranged")
 				var looks := {}
 				for s in sims:
 					looks[str(s.look)] = true
@@ -191,6 +194,7 @@ func _physics_process(_d: float) -> bool:
 				for s in _main.sims:
 					_kills0 += s.kills
 					s.set_meta("dmg0", s.damage_dealt)
+					s.set_meta("heals0", s.heals_done)
 				p.set_meta("dmg0", p.damage_dealt)
 			if _pf > 120:
 				for s in _main.sims:
@@ -205,7 +209,18 @@ func _physics_process(_d: float) -> bool:
 				for s in _main.sims:
 					dmg.append(s.damage_dealt - int(s.get_meta("dmg0")))
 				var pd: int = p.damage_dealt - int(p.get_meta("dmg0"))
-				_check(dmg.min() > 0 and dmg.reduce(func(a, b): return a + b) >= pd * 0.25,
+				# The healer stays back and spends its casts on heals, so it counts heals or damage.
+				var healer_did := false
+				var fighters := 0
+				var others_ok := true
+				for n in _main.sims.size():
+					var s = _main.sims[n]
+					if s.role == "healer":
+						healer_did = dmg[n] > 0 or s.heals_done > int(s.get_meta("heals0", 0))
+					else:
+						fighters += dmg[n]
+						others_ok = others_ok and dmg[n] > 0
+				_check(others_ok and healer_did and fighters >= pd * 0.2,
 					"every Simmo fights on its own (damage %s vs player %d, %d Simmo kills)" % [str(dmg), pd, k - _kills0])
 				_check(_ever_far < 600.0, "sims never got lost while following (furthest %.0f px)" % _ever_far)
 				p.set_auto_battle(false)
@@ -248,7 +263,9 @@ func _physics_process(_d: float) -> bool:
 					if s.global_position.distance_to(p.global_position) < 300.0:
 						near += 1
 				_check(near == 3, "and sticks around on the new map (%d of 3 within 300 px)" % near)
-				_goto("done")
+				_goto("priest")
+		"priest":
+			_priest(p, world)
 		"done":
 			if _failures == 0:
 				_log.ok("ALL PARTY CHECKS PASSED (%d frames)" % _frame)
@@ -259,3 +276,60 @@ func _physics_process(_d: float) -> bool:
 		_log.error("timeout in phase " + _phase)
 		quit(1)
 	return false
+
+## The Priest: heal over time, party heal, stays back, never melees, smites the undead.
+func _priest(p, world) -> void:
+	if _pf == 1:
+		_park_all()
+		_place(p, Vector2(700, 330))
+		_place(_healer, Vector2(640, 330))
+		_place(_tank, Vector2(760, 330))
+		_healer.mp = _healer.max_mp
+		for k in _healer.spell_cd:
+			_healer.spell_cd[k] = 0.0
+		p.hp = int(p.max_hp * 0.8)
+		_hp_track = []
+	if _pf == 40:
+		_check(p.buffs.has("renew"), "the Priest puts Renew (a heal over time) on a lightly hurt ally")
+		_hp_track.append(p.hp)
+	if _pf == 100 or _pf == 160:
+		_hp_track.append(p.hp)
+	if _pf == 161:
+		_check(_hp_track[1] > _hp_track[0] and _hp_track[2] > _hp_track[1], "Renew keeps healing over time (%s)" % str(_hp_track))
+		# Two allies hurt: Prayer heals both at once.
+		p.buffs.clear()
+		_tank.buffs.clear()
+		p.hp = int(p.max_hp * 0.5)
+		_tank.hp = int(_tank.max_hp * 0.5)
+		_healer.mp = _healer.max_mp
+		_healer._cast_cd = 0.0
+		for k in _healer.spell_cd:
+			_healer.spell_cd[k] = 0.0
+		_hp_track = [p.hp, _tank.hp]
+	if _pf == 175:
+		_check(p.hp > _hp_track[0] and _tank.hp > _hp_track[1] and _healer.spell_cd.prayer > 0.0, "with two allies hurt, Prayer heals the whole party")
+		# A fight: the Priest stays back, never swings, and smites.
+		p.hp = p.max_hp
+		_tank.hp = _tank.max_hp
+		_m = _dummy(0, Vector2(860, 329))
+		p.set_auto_battle(true)
+		_swings_p = _healer.swings
+		_closest = 9999.0
+		_healer.set_meta("pd0", _healer.damage_dealt)
+	if _pf > 180 and _pf < 600:
+		_closest = minf(_closest, absf(_healer.position.x - _m.position.x))
+	if _pf == 600:
+		p.set_auto_battle(false)
+		_check(_healer.swings == _swings_p, "the Priest never melees (%d swings)" % (_healer.swings - _swings_p))
+		_check(_closest > 50.0, "and keeps its distance from the fight (closest %.0f px)" % _closest)
+		_check(_healer.damage_dealt > int(_healer.get_meta("pd0")), "while smiting from range (%d damage)" % (_healer.damage_dealt - int(_healer.get_meta("pd0"))))
+		# Holy light burns the undead.
+		var Comb = load("res://scripts/combat.gd")
+		_m.data = world.mob_data("skeleton", 24)
+		_m.max_hp = 100000
+		_m.hp = 100000
+		var r1: Dictionary = Comb.hit(_m, p, 100, "holy", {"crit_chance": 0.0})
+		_m.data = world.mob_data("green_slime", 3)
+		var r2: Dictionary = Comb.hit(_m, p, 100, "holy", {"crit_chance": 0.0})
+		_check(int(r1.amount) == int(r2.amount * 1.5), "Smite does +50%% to undead (%d vs %d)" % [r1.amount, r2.amount])
+		_goto("done")

@@ -57,6 +57,7 @@ func _ready() -> void:
 	if load_user_settings:
 		pause_menu.load_settings()
 	else:
+		pause_menu.persist = false
 		pause_menu.apply_settings()
 	if show_start_screen:
 		_start_layer = CanvasLayer.new()
@@ -154,6 +155,12 @@ func start_game(id: String, look: Dictionary = {}, player_name := "") -> void:
 	ChatLog.clear()
 	chat_box = ChatBox.new()
 	layer.add_child(chat_box)
+	# Remember the chat's size and minimized state with the settings.
+	chat_box.layout_changed.connect(func() -> void:
+		pause_menu.settings.chat_w = chat_box.box_w
+		pause_menu.settings.chat_rows = chat_box.rows
+		pause_menu.settings.chat_min = chat_box.minimized
+		pause_menu.save_settings())
 	trade_ui = TradeUI.new()
 	trade_ui.player = player
 	trade_ui.main = self

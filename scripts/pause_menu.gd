@@ -19,9 +19,12 @@ const FPS_CAPS := [0, 60, 120, 144, 165, 240]
 var main: Node
 var tab := "Settings"
 var settings_path := "user://settings.cfg"
+## False in tests and tools (main.load_user_settings = false): settings are applied but never written.
+var persist := true
 const DEFAULTS := {"master": 0.9, "effects": 0.8, "ambient": 0.6, "mute": false, "weather": true, "day_cycle": true,
 	"time": 0.4, "auto_advance": true, "show_help": true,
-	"window": "auto", "fullscreen": false, "vsync": false, "fps_cap": 0, "show_fps": false}
+	"window": "auto", "fullscreen": false, "vsync": false, "fps_cap": 0, "show_fps": false,
+	"chat_w": 250.0, "chat_rows": 6, "chat_min": false}
 var settings := DEFAULTS.duplicate()
 var status := ""
 var _font: Font
@@ -62,6 +65,8 @@ func load_settings() -> void:
 	apply_settings()
 
 func save_settings() -> void:
+	if not persist:
+		return
 	var cf := ConfigFile.new()
 	for k in settings:
 		cf.set_value("settings", k, settings[k])
@@ -120,6 +125,8 @@ func apply_settings() -> void:
 			main.weather.time_of_day = float(settings.time)
 	if main.player:
 		main.player.cfg.auto_advance_zones = bool(settings.auto_advance)
+	if main.chat_box:
+		main.chat_box.set_layout(float(settings.chat_w), int(settings.chat_rows), bool(settings.chat_min))
 	if main.hud:
 		main.hud.show_help = bool(settings.show_help)
 		main.hud.show_fps = bool(settings.show_fps)

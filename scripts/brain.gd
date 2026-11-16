@@ -45,6 +45,14 @@ func has_leader() -> bool:
 	return leader != null and is_instance_valid(leader) and leader.is_inside_tree()
 
 func think(delta: float) -> Dictionary:
+	var i := _think(delta)
+	# Never walk past something you could hit: swing at a mob in front whenever the weapon is
+	# ready, whatever else we're doing (following, routing, assisting). Healers keep their distance.
+	if role != "healer" and not i.attack and i.spell == "" and a._attack_cd <= 0.0 and a._mob_in_front():
+		i.attack = true
+	return i
+
+func _think(delta: float) -> Dictionary:
 	var i := Actor.blank_intent()
 	var cfg: Dictionary = a.cfg
 	_retarget -= delta
@@ -65,15 +73,18 @@ func think(delta: float) -> Dictionary:
 	if a.is_on_floor() and _slam_incoming():
 		i.jump = true
 		return i
+	if role == "healer":
+		_try_heal(i)
 	if following:
 		if leader.is_on_floor() and a.world:
 			_leader_surface = a.world.nav.surface_at(leader.global_position.x, leader.global_position.y)
-		if role == "healer":
-			_try_heal(i)
 		# Too far from the leader: drop everything and catch up.
 		if a.global_position.distance_to(leader.global_position) > float(party_cfg.get("follow_leash", 220.0)):
 			target = null
 			return _follow(i)
+		# Healers stay back with the party: heal, smite from range, never walk into melee.
+		if role == "healer":
+			return _healer_step(i)
 	var lost: bool = target == null or not is_instance_valid(target) or not target.alive
 	# Once a target is wounded we stay on it until it dies (or we give up on it).
 	var engaged: bool = not lost and target.hp < target.max_hp
@@ -313,24 +324,72 @@ func _follow(i: Dictionary) -> Dictionary:
 		return i
 	return _route_to(i, _leader_surface, gx)
 
-## Healers: heal the most hurt party member under the threshold who is in range.
+## Healers, by priority: Prayer when several allies are hurt, Heal for anyone low,
+## Renew (heal over time) to keep allies topped up. Thresholds in balance.json party.
 func _try_heal(i: Dictionary) -> void:
-	if not a.spells.has("heal") or not a.can_cast("heal") or a.world == null:
+	if a.world == null:
 		return
-	var below := float(party_cfg.get("heal_below", 0.65))
-	var reach := float(a.spells.heal.range)
-	var best: Node2D = null
-	var best_frac := below
+	var pcfg: Dictionary = party_cfg if not party_cfg.is_empty() else a._balance.get("party", {})
+	var reach := float(a.spells.get("heal", a.spells.get("renew", {"range": 170})).get("range", 170.0))
+	var hurt: Array = []
 	for m in a.world.party:
-		if not is_instance_valid(m) or not m.is_inside_tree() or not m.is_alive():
-			continue
-		var frac := float(m.hp) / float(m.max_hp)
-		if frac < best_frac and m.global_position.distance_to(a.global_position) <= reach:
-			best_frac = frac
-			best = m
-	if best:
-		a.spell_target = best
+		if is_instance_valid(m) and m.is_inside_tree() and m.is_alive() and m.global_position.distance_to(a.global_position) <= reach:
+			hurt.append(m)
+	if hurt.is_empty():
+		return
+	hurt.sort_custom(func(x, y): return float(x.hp) / x.max_hp < float(y.hp) / y.max_hp)
+	var low = hurt[0]
+	var low_frac := float(low.hp) / float(low.max_hp)
+	var several := hurt.filter(func(m): return float(m.hp) / m.max_hp < float(pcfg.get("prayer_below", 0.7))).size()
+	if several >= 2 and a.can_cast("prayer"):
+		i.spell = "prayer"
+	elif low_frac < float(pcfg.get("heal_below", 0.55)) and a.can_cast("heal"):
+		a.spell_target = low
 		i.spell = "heal"
+	elif a.can_cast("renew"):
+		for m in hurt:
+			if float(m.hp) / m.max_hp < float(pcfg.get("renew_below", 0.9)) and not m.buffs.has("renew"):
+				a.spell_target = m
+				i.spell = "renew"
+				break
+
+## Healer in a party: smite what the leader fights from where we stand, back off from mobs that
+## come close, otherwise keep to our spot behind the leader. Never melee.
+func _healer_step(i: Dictionary) -> Dictionary:
+	var keep := float(role_cfg.get("keep_back", 95.0))
+	var x := a.global_position.x
+	if i.spell == "":
+		var t := _leader_target()
+		if t == null:
+			var best := 170.0
+			for m in a.get_tree().get_nodes_in_group("mobs"):
+				var d: float = absf(m.global_position.x - x)
+				if m.alive and d < best and absf(mob_surface_y(m) - a.global_position.y) < 30.0:
+					best = d
+					t = m
+		if t:
+			target = t
+			var pick := pick_spell(t)
+			if pick != "":
+				i.spell = pick
+				a.facing = 1 if t.global_position.x >= x else -1
+	if not a.is_on_floor():
+		return _air(i)
+	# A mob got close: step away from it (if there's floor to step onto).
+	for m in a.get_tree().get_nodes_in_group("mobs"):
+		if m.alive and absf(m.global_position.x - x) < keep * 0.55 and absf(m.global_position.y - a.global_position.y) < 24.0:
+			var away := -signf(m.global_position.x - x)
+			var s_id: int = a.world.nav.surface_at(x, a.global_position.y) if a.world else -1
+			if s_id >= 0:
+				var s: Dictionary = a.world.nav.surfaces[s_id]
+				if x + away * 20.0 > float(s.x0) + 6.0 and x + away * 20.0 < float(s.x1) - 6.0:
+					i.dir = away
+					return i
+	var spell: String = i.spell
+	i = _follow(i)
+	i.spell = spell
+	i.attack = false
+	return i
 
 ## A platform above the target the ranged sim can throw from, or {}.
 func _find_perch(t: Mob) -> Dictionary:
@@ -409,6 +468,10 @@ func pick_spell(t: Mob) -> String:
 			"buff":
 				if not a.buffs.has(id) and dist <= 140.0:
 					return id
+			"bolt":
+				# Bolts outside the mage's combo plan (the Priest's Smite).
+				if String(sp.element) == "holy" and dist <= float(sp.range) and dy <= 22.0:
+					return id
 	return ""
 
 func _facing_ok(t: Mob) -> bool:
@@ -475,8 +538,9 @@ func _pick_target() -> Mob:
 			var rdx: float = absf(m.global_position.x - a.global_position.x)
 			if rdx <= float(a.weapon.range) and absf(mob_surface_y(m) - a.global_position.y) < 90.0:
 				cost -= 300.0
-		# Assist: ranged and healers hit whatever the leader is fighting, so damage stacks up.
-		if following and role in ["ranged", "healer"] and m == _leader_target():
+		# Assist: everyone goes for what the leader is fighting, so damage stacks up instead of
+		# Simmos walking to mobs the leader kills before they arrive.
+		if following and role in ["tank", "ranged", "healer"] and m == _leader_target():
 			cost -= 400.0
 		if cost < best_cost:
 			best_cost = cost

@@ -227,6 +227,9 @@ func set_class(balance: Dictionary, id: String, weapon_id := "", skill_ids: Arra
 	set_look(look)
 	_set_spells(skill_ids if not skill_ids.is_empty() else class_cfg.get("spells", []))
 	set_ultimate(String(class_cfg.get("ultimate", "")))
+	# Healer classes (Priest) heal the party in auto-battle; SimPlayer roles overwrite this.
+	if brain:
+		brain.role = String(class_cfg.get("role", ""))
 	_set_weapon(weapon_id if weapon_id != "" else String(allowed_weapons[0]))
 	for k in STATS:
 		base_stats[k] = int(class_cfg.get("stats", {}).get(k, 4))
@@ -711,8 +714,14 @@ func cast(id: String) -> bool:
 		sfx(cast_sound, 0.7)
 	else:
 		sfx("swing", 0.8, 0.8)
-	if String(sp.kind) == "heal":
-		_cast_heal(sp)
+	if String(sp.kind) in ["heal", "hot", "party_heal"]:
+		match String(sp.kind):
+			"heal":
+				_cast_heal(sp)
+			"hot":
+				_cast_renew(sp)
+			"party_heal":
+				_cast_prayer(sp)
 		stats_changed.emit()
 		return true
 	if String(sp.element) != "physical":
@@ -859,12 +868,53 @@ func _cast_volley(sp: Dictionary, target: Mob, from: Vector2) -> void:
 		pr.global_position = from + Vector2(0, -3 * k)
 		last_projectile = pr
 
-## Heal the spell target (or yourself): heal_min..heal_max plus heal_per_level per level.
+## Who a heal lands on: the brain's pick, or (cast by hand) the most hurt party member in range.
+func _heal_target(sp: Dictionary) -> Node2D:
+	if is_instance_valid(spell_target) and spell_target.is_alive():
+		var t := spell_target
+		spell_target = null
+		return t
+	var best: Node2D = self
+	var best_frac := float(hp) / maxf(max_hp, 1)
+	if world:
+		for m in world.party:
+			if is_instance_valid(m) and m.is_inside_tree() and m.is_alive() and m.global_position.distance_to(global_position) <= float(sp.get("range", 170.0)):
+				var fr := float(m.hp) / maxf(m.max_hp, 1)
+				if fr < best_frac:
+					best_frac = fr
+					best = m
+	return best
+
+## Heal per level and staff: heal_min..heal_max + heal_per_level per level, times the weapon's spell_power.
+func heal_amount(sp: Dictionary) -> int:
+	var base := randi_range(int(sp.get("heal_min", 0)), int(sp.get("heal_max", 0))) + (level - 1) * int(sp.get("heal_per_level", 0))
+	return int(round(base * float(weapon.get("spell_power", 1.0))))
+
+## Renew: heal over time on one ally (a regen buff that ticks once a second).
+func _cast_renew(sp: Dictionary) -> void:
+	var who: Node2D = _heal_target(sp)
+	var total := (float(sp.heal_total) + (level - 1) * float(sp.get("heal_total_per_level", 0))) * float(weapon.get("spell_power", 1.0))
+	var dur := float(sp.duration)
+	who.buffs["renew"] = {"name": "Renew", "t": dur, "max_t": dur, "color": String(sp.color), "regen": total / dur, "label": "+%d HP/s" % int(round(total / dur))}
+	heals_done += 1
+	if who != self:
+		facing = 1 if who.global_position.x >= global_position.x else -1
+	Fx.burst(get_parent(), who.global_position + Vector2(0, -12), 12.0, Color(sp.color))
+
+## Prayer: heal everyone in the party within reach.
+func _cast_prayer(sp: Dictionary) -> void:
+	Fx.burst(get_parent(), global_position + Vector2(0, -12), float(sp.radius) * 0.5, Color(sp.color))
+	var party: Array = world.party if world else [self]
+	for m in party:
+		if is_instance_valid(m) and m.is_inside_tree() and m.is_alive() and m.global_position.distance_to(global_position) <= float(sp.radius):
+			m.heal(heal_amount(sp))
+			Fx.burst(m.get_parent(), m.global_position + Vector2(0, -12), 10.0, Color(sp.color))
+	heals_done += 1
+
+## Heal the spell target (or the most hurt ally in range).
 func _cast_heal(sp: Dictionary) -> void:
-	var who: Node2D = spell_target if is_instance_valid(spell_target) and spell_target.is_alive() else self
-	spell_target = null
-	var amount := randi_range(int(sp.heal_min), int(sp.heal_max)) + (level - 1) * int(sp.get("heal_per_level", 0))
-	who.heal(amount)
+	var who: Node2D = _heal_target(sp)
+	who.heal(heal_amount(sp))
 	heals_done += 1
 	if who != self:
 		facing = 1 if who.global_position.x >= global_position.x else -1
@@ -1123,12 +1173,22 @@ func _nav_reset() -> void:
 	set_collision_mask_value(LAYER_PLATFORMS, true)
 
 func _tick_buffs(delta: float) -> void:
+	# Heals over time (Renew, Sanctuary) tick once a second, each showing a small green number.
+	var regen := 0.0
+	for k in buffs:
+		regen += float(buffs[k].get("regen", 0.0))
+	if regen > 0.0:
+		_regen_acc += delta
+		if _regen_acc >= 1.0:
+			_regen_acc -= 1.0
+			if hp > 0 and hp < max_hp:
+				var before := hp
+				hp = mini(hp + int(round(regen)), max_hp)
+				FloatText.spawn(get_parent(), global_position + Vector2(randf_range(-4, 4), -H - 2), "+%d" % (hp - before), Color("#b6ff9d"), 0.7)
+				stats_changed.emit()
+	else:
+		_regen_acc = 0.0
 	for k in buffs.keys():
-		if buffs[k].has("regen"):
-			_regen_acc += float(buffs[k].regen) * delta
-			if _regen_acc >= 1.0 and hp > 0:
-				hp = mini(hp + int(_regen_acc), max_hp)
-				_regen_acc -= int(_regen_acc)
 		buffs[k].t -= delta
 		if buffs[k].t <= 0.0:
 			Log.info("%s wore off" % buffs[k].name)
@@ -1194,6 +1254,8 @@ func _draw() -> void:
 		tip = hand + Vector2(facing * length, 0).rotated(angle)
 	else:
 		tip = hand + Vector2(facing * length * 0.35, -length * 0.85)
+	if _regen_t_visual():
+		_draw_regen()
 	doll.draw(self, hand)
 	draw_weapon_shape(self, weapon_key, weapon, hand, tip)
 	doll.draw_hand(self, hand)
@@ -1217,6 +1279,20 @@ func _draw_channel() -> void:
 		var ph := fmod(t * 3.0 + k * 0.2, 1.0)
 		draw_rect(Rect2(Vector2(-10 + k * 5, -ph * 34.0), Vector2(2, 2)), Color(col.lightened(0.4), 1.0 - ph))
 	draw_circle(Vector2(facing * 8, -14), 3.0 + 3.0 * t, Color(col, 0.6))
+
+func _regen_t_visual() -> bool:
+	for b in buffs.values():
+		if float(b.get("regen", 0.0)) > 0.0:
+			return true
+	return false
+
+## Heal over time: soft green motes rising around the body.
+func _draw_regen() -> void:
+	var t := Time.get_ticks_msec() / 1000.0
+	for k in 6:
+		var ph := fmod(t * 0.8 + k * 0.17, 1.0)
+		var x := sin(k * 2.4 + t) * 7.0
+		draw_circle(Vector2(x, -2.0 - ph * 26.0), 1.1 * (1.0 - ph * 0.5), Color(0.7, 1.0, 0.6, 0.85 * (1.0 - ph)))
 
 ## Speech bubble: white box over the head, wrapped to two lines, fading out at the end.
 func _draw_bubble() -> void:

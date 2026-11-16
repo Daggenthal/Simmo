@@ -214,6 +214,11 @@ func _draw_party(vs: Vector2) -> float:
 		var r := Rect2(x, y + 11, 100, 4)
 		draw_rect(r, Color(0, 0, 0, 0.6))
 		draw_rect(Rect2(r.position, Vector2(r.size.x * clampf(float(m.hp) / m.max_hp, 0.0, 1.0), r.size.y)), Color("#e04848"))
+		# Heal over time ticking on this member: a green marker by the bar.
+		for bf in m.buffs.values():
+			if float(bf.get("regen", 0.0)) > 0.0:
+				_text(Vector2(r.end.x + 2, r.end.y + 1), "+", Color("#b6ff9d"), 9)
+				break
 		if down:
 			_text(Vector2(x + 70, y + 8), "KO", Color("#ff6b6b"), 8)
 		y += 19.0

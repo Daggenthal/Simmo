@@ -64,7 +64,8 @@ static func make(rarity: String, level: int, class_weapons: Array = []) -> Dicti
 	else:
 		var st: String = ["str", "dex", "int", "luk"].pick_random()
 		mods[st] = maxi(1, int(round(float(bb.jewel_stat_per_level) * level)))
-	var pool: Array = d.affixes.keys()
+	# Affixes never repeat the base bonus's stat (a Magic weapon must show a second line, not a bigger first).
+	var pool: Array = d.affixes.keys().filter(func(k): return not mods.has(k))
 	pool.shuffle()
 	var picked: Array = pool.slice(0, int(r.affixes))
 	for k in picked:

@@ -53,6 +53,9 @@ static func hit(mob: Mob, attacker: Node2D, base: int, element: String, opts: Di
 	if crit:
 		amount = int(round(amount * float(opts.get("crit_mult", 2.0))))
 	# Resists cut the damage and the chance the element's effect sticks.
+	# Holy light burns the undead.
+	if element == "holy" and bool(mob.data.get("undead", false)):
+		amount = int(round(amount * float(e.get("undead_mult", 1.0))))
 	var res := mob.resist(element)
 	if res > 0.0:
 		amount = maxi(1, int(round(amount * (1.0 - res))))

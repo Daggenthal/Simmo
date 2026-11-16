@@ -97,7 +97,7 @@ func _physics_process(_d: float) -> bool:
 				_check(_main.start_screen != null and _main.player == null, "game opens on the class select screen")
 				_bal = _main.balance
 				var ss = _main.start_screen
-				_check(ss.ids.size() == 3, "three classes to pick from (%s)" % str(ss.ids))
+				_check(ss.ids.size() == 4 and "priest" in ss.ids, "four classes to pick from, the Priest included (%s)" % str(ss.ids))
 				_key(KEY_3)
 			if _pf == 6:
 				var ss = _main.start_screen
@@ -159,6 +159,9 @@ func _check_weapons(p) -> void:
 	p.set_class(_bal, "rogue")
 	_check(p.weapon_key == "dagger" and p.allowed_weapons.has("throwing_kunai") and not p.allowed_weapons.has("iron_hammer"), "a Rogue gets the dagger and kunai, not the hammer")
 	_check(String(_bal.weapons.dagger.get("motion", "")) == "thrust", "daggers stab instead of swinging an arc")
+	p.set_class(_bal, "priest")
+	_check(p.weapon_key == "holy_scepter" and p.spells.has("renew") and p.spells.has("smite") and p.ult_id == "sanctuary" and p.brain.role == "healer",
+		"a Priest gets the Holy Scepter, Heal, Renew, Prayer, Smite and Sanctuary, and heals the party in auto-battle")
 	# Every class fills all four skill slots.
 	for c in _bal.classes:
 		_check(_bal.classes[c].spells.size() == 4, "%s has 4 skills (%s)" % [_bal.classes[c].name, str(_bal.classes[c].spells)])

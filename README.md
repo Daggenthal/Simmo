@@ -52,6 +52,7 @@ Each class only uses its own weapons, has four skills and an ultimate:
 | Warrior | STR | Short Sword (start), Iron Hammer | Power Strike, Ground Slam, War Cry (+25% damage), Charge (dash through mobs) | Titan's Wrath: leap and quake, stuns everything nearby, then Berserk (+50% damage) |
 | Mage | INT | Oak Staff (+20% spell damage) | Fireball, Frost Bolt, Venom Glob, Chain Lightning | Arcane Cataclysm: a short channel, then a fire cone and lightning on every mob on the map |
 | Rogue | DEX | Dagger (start, stabs), Throwing Kunai | Lucky Seven (2 kunai), Venom Glob, Flurry (3 stabs), Haste (+30% attack speed) | Shadow Dance: vanish and blink between up to 8 mobs, 3 strikes each |
+| Priest | INT | Holy Scepter (+15% heals and Smite) | Heal, Renew (heal over time, 10 s), Prayer (party heal), Smite (holy bolt, +50% to undead) | Sanctuary: full party heal plus regeneration |
 
 Mages fight from range: they keep their distance and only walk in to melee when every spell is on cooldown. Skill slots show the seconds left on each cooldown.
 
@@ -91,7 +92,7 @@ Gear (weapons for your class, rings, amulets) rolls STR / DEX / INT / LUK, damag
 
 ## Party (Simmos)
 
-Three Simmos join you: Brannoc (Warrior tank), Liriel (Mage healer with Heal and Sanctuary) and xXKunaiXx (Rogue ranged). They follow you across platforms and through portals, fight by role (the tank in front, ranged and healer on your target, the ranged climbing onto platforms), use their ultimates, drink their own potions and ask for more when they run out. Kill XP is split with a party bonus. Invite and kick from the pause menu's Party tab; Goldvein and Fennick wait on the roster.
+Three Simmos join you: Brannoc (Warrior tank), Liriel (Priest healer) and xXKunaiXx (Rogue ranged). They follow you across platforms and through portals, fight by role (everyone assists your target; the tank in front; the ranged throws from where it stands or a nearby platform; the Priest stays behind the party, never melees, heals by priority and smites when nobody needs healing), use their ultimates, drink their own potions and ask for more when they run out. Kill XP is split with a party bonus. Invite and kick from the pause menu's Party tab; Goldvein and Fennick wait on the roster.
 
 Trade with T: click your items to offer, theirs to ask. Simmos accept gifts and fair deals and keep a couple of potions for themselves. They talk in party chat and in speech bubbles, without spamming.
 
@@ -101,7 +102,7 @@ Trade with T: click your items to offer, theirs to ask. Simmos accept gifts and 
 
 ## Chat
 
-Bottom left, with tabs: All (no damage spam), Chat, Combat. Colors: white local (passers-by), blue party, yellow system, green XP, cyan loot (gear in its rarity color), orange your damage and kills, pink trades, red warnings.
+Bottom left, with tabs: All (no damage spam), Chat, Combat. Drag the grip in its top-right corner to resize it, click - to minimize it, and scroll with the mouse wheel or Page Up / Page Down (new lines don't move the view while you read; the "new" marker jumps back down). The size is saved. Colors: white local (passers-by), blue party, yellow system, green XP, cyan loot (gear in its rarity color), orange your damage and kills, pink trades, red warnings.
 
 ## World
 

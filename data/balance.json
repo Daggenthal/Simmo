@@ -246,7 +246,8 @@
       "resist": {
         "poison": 0.75
       },
-      "aggro_range": 130
+      "aggro_range": 130,
+      "undead": true
     },
     "ice_golem": {
       "name": "Ice Golem",
@@ -354,7 +355,8 @@
       "resist": {
         "poison": 0.75,
         "frost": 0.4
-      }
+      },
+      "undead": true
     }
   },
   "respawn_time": 6.0,
@@ -446,6 +448,24 @@
       "spell_power": 1.2,
       "orb": "#8fd8ff",
       "action": "Light bonk in front; boosts your spells by 20%"
+    },
+    "holy_scepter": {
+      "name": "Holy Scepter",
+      "speed_label": "Normal",
+      "cooldown": 0.9,
+      "windup": 0.12,
+      "damage_min": 11,
+      "damage_max": 15,
+      "range": 28,
+      "height": 26,
+      "knockback": 70,
+      "max_targets": 1,
+      "length": 20,
+      "color": "#e8c34a",
+      "stat": "int",
+      "spell_power": 1.15,
+      "orb": "#fff3b0",
+      "action": "Light bonk; boosts your heals and Smite by 15%"
     }
   },
   "spells": {
@@ -518,15 +538,15 @@
       "element": "holy",
       "key": "H",
       "kind": "heal",
-      "mp": 8,
+      "mp": 9,
       "cooldown": 3.0,
-      "heal_min": 14,
-      "heal_max": 18,
-      "heal_per_level": 4,
-      "range": 160,
+      "heal_min": 20,
+      "heal_max": 26,
+      "heal_per_level": 6,
+      "range": 170,
       "color": "#9dffb0",
       "stat": "int",
-      "desc": "Heals an ally"
+      "desc": "A big heal on one ally"
     },
     "power_strike": {
       "name": "Power Strike",
@@ -702,6 +722,48 @@
       "color": "#9dffb0",
       "desc": "Fully heals the party, then heals 8 HP a second for 5 s",
       "scale_cooldown": 1.0
+    },
+    "renew": {
+      "name": "Renew",
+      "element": "holy",
+      "kind": "hot",
+      "stat": "int",
+      "mp": 7,
+      "cooldown": 2.0,
+      "heal_total": 36,
+      "heal_total_per_level": 8,
+      "duration": 10.0,
+      "range": 170,
+      "color": "#b6ff9d",
+      "desc": "Heals an ally slowly over 10 s"
+    },
+    "prayer": {
+      "name": "Prayer",
+      "element": "holy",
+      "kind": "party_heal",
+      "stat": "int",
+      "mp": 16,
+      "cooldown": 10.0,
+      "heal_min": 14,
+      "heal_max": 18,
+      "heal_per_level": 4,
+      "radius": 220,
+      "color": "#fff3b0",
+      "desc": "Heals everyone in the party nearby"
+    },
+    "smite": {
+      "name": "Smite",
+      "element": "holy",
+      "kind": "bolt",
+      "stat": "int",
+      "mp": 5,
+      "cooldown": 2.5,
+      "damage_min": 12,
+      "damage_max": 16,
+      "speed": 260,
+      "range": 170,
+      "color": "#ffe9a0",
+      "desc": "A bolt of holy light. +50% damage to undead"
     }
   },
   "elements": {
@@ -738,7 +800,8 @@
       "color": "#ffffff"
     },
     "holy": {
-      "color": "#9dffb0"
+      "color": "#ffe9a0",
+      "undead_mult": 1.5
     }
   },
   "mob_scaling": {
@@ -760,7 +823,7 @@
     "follow_leash": 220,
     "engage_radius": 260,
     "respawn_time": 5.0,
-    "heal_below": 0.65,
+    "heal_below": 0.55,
     "sim_potion_hp_below": 0.4,
     "start_with": [
       "Brannoc",
@@ -768,7 +831,9 @@
       "xXKunaiXx"
     ],
     "max_size": 4,
-    "_doc_roster": "'sims' is the roster of SimPlayers you know; start_with join at the start; the Party tab (Esc) invites and kicks. max_size counts you."
+    "_doc_roster": "'sims' is the roster of SimPlayers you know; start_with join at the start; the Party tab (Esc) invites and kicks. max_size counts you.",
+    "renew_below": 0.9,
+    "prayer_below": 0.7
   },
   "sim_roles": {
     "tank": {
@@ -786,16 +851,19 @@
     },
     "healer": {
       "label": "Healer",
-      "weapon": "oak_staff",
+      "weapon": "holy_scepter",
       "spells": [
         "heal",
-        "frost_bolt"
+        "renew",
+        "prayer",
+        "smite"
       ],
       "hp_mult": 1.0,
       "follow_offset": -44,
       "color": "#7fe39b",
-      "class": "mage",
-      "ultimate": "sanctuary"
+      "class": "priest",
+      "ultimate": "sanctuary",
+      "keep_back": 95
     },
     "ranged": {
       "label": "Ranged",
@@ -1086,6 +1154,54 @@
       },
       "color": "#7fe39b",
       "ultimate": "shadow_dance"
+    },
+    "priest": {
+      "name": "Priest",
+      "desc": "Keeps the party alive. Heals, heals over time, and smites the undead.",
+      "primary": "int",
+      "secondary": "luk",
+      "weapons": [
+        "holy_scepter"
+      ],
+      "spells": [
+        "heal",
+        "renew",
+        "prayer",
+        "smite"
+      ],
+      "ultimate": "sanctuary",
+      "role": "healer",
+      "stats": {
+        "str": 4,
+        "dex": 4,
+        "int": 12,
+        "luk": 5
+      },
+      "auto_ap": {
+        "int": 4,
+        "luk": 1
+      },
+      "hp_mult": 0.95,
+      "mp_mult": 1.5,
+      "look": {
+        "gender": "female",
+        "skin": "#f6d2b0",
+        "face": "cheery",
+        "eye_color": "#3a8a4a",
+        "hair": "long",
+        "hair_color": "#f2e2a0",
+        "top": "robe",
+        "top_color": "#f4f1e6",
+        "bottom": "long_skirt",
+        "bottom_color": "#f4f1e6",
+        "shoes": "sandals",
+        "shoes_color": "#8b6238",
+        "hat": "ribbon",
+        "hat_color": "#e8c34a",
+        "cape": "none",
+        "cape_color": "#e8c34a"
+      },
+      "color": "#fff3b0"
     }
   },
   "start_class": "warrior",

@@ -74,6 +74,7 @@ func _physics_process(_d: float) -> bool:
 					"local is white, party is blue, system is yellow")
 				_check_logs(p, world)
 				_check_tabs()
+				_check_chat_box()
 				_check_spam()
 				_main.chatter._local_t = 0.05
 				_lines0 = CL.count("local")
@@ -84,6 +85,10 @@ func _physics_process(_d: float) -> bool:
 				_goto("potions")
 		"potions":
 			if _pf == 1:
+				# Out of the healer's reach, so it's the potion that saves it.
+				for s in _main.sims:
+					if s.role == "healer":
+						s.mp = 0.0
 				_tank.hp = int(_tank.max_hp * 0.2)
 				_tank._item_cd = 0.0
 				_n0 = _tank.inventory.count("red_potion")
@@ -195,3 +200,36 @@ func _check_party() -> void:
 	for s in main.sims:
 		if s.display_name == "Goldvein":
 			_tank = s
+
+## Resize, minimize and scroll the chat box.
+func _check_chat_box() -> void:
+	var box = _main.chat_box
+	box.tab = "All"
+	box._reset_view()
+	var w0: float = box.box_w
+	var r0: int = box.rows
+	box.start_resize()
+	box.drag_resize(Vector2(60, -30))
+	box.end_resize()
+	_check(box.box_w == w0 + 60 and box.rows == r0 + 3, "dragging the grip resizes the chat (%dx%d rows -> %dx%d rows)" % [w0, r0, box.box_w, box.rows])
+	box.start_resize()
+	box.drag_resize(Vector2(-999, 999))
+	box.end_resize()
+	_check(box.box_w == box.MIN_W and box.rows == box.MIN_ROWS, "it can't shrink below a usable size (%d px, %d rows)" % [box.box_w, box.rows])
+	_check(int(_main.pause_menu.settings.chat_rows) == box.rows, "the chat size goes into the settings (saved to disk in the real game)")
+	box.toggle_minimized()
+	_check(box.minimized and box.box_size().y < 20.0, "the - button minimizes it to its tabs")
+	box.toggle_minimized()
+	box.set_layout(250, 4, false)
+	for k in 12:
+		CL.add("system", "filler line %d" % k)
+	box._process(0.0)
+	var newest: String = box.visible_lines()[-1].text
+	box.scroll_by(5)
+	_check(box.visible_lines()[-1].text != newest and box.scroll == 5, "scrolling shows older lines")
+	CL.add("system", "brand new line")
+	box._process(0.0)
+	_check(not box.visible_lines().any(func(l): return l.text == "brand new line") and box._unread == 1, "while scrolled up, a new line doesn't move the view (1 new)")
+	box._reset_view()
+	_check(box.visible_lines()[-1].text == "brand new line", "jumping back down shows the newest line")
+	box.set_layout(250, 6, false)

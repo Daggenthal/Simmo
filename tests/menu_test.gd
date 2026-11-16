@@ -50,6 +50,7 @@ func _physics_process(_d: float) -> bool:
 		"boot":
 			if _pf == 5:
 				menu.settings_path = "user://test_settings.cfg"
+				menu.persist = true  # this test checks saving, to its own file only
 				p.set_auto_battle(true)
 			if _pf == 30:
 				_esc()
@@ -132,6 +133,7 @@ func _settings(menu) -> void:
 	menu.settings = menu.DEFAULTS.duplicate()
 	menu.apply_settings()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(menu.settings_path))
+	menu.persist = false  # closing the menu later must not write the file back
 
 func _party(menu) -> void:
 	menu.tab = "Party"
