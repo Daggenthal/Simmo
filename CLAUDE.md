@@ -15,7 +15,7 @@ Current state: milestone M1. Everything is drawn and synthesized in code (no art
 **The loop:** Reproduce, write a failing test, fix, run the full suite several times, look at a screenshot when anything visual changed. Every bug fixed so far got a regression test first; keep doing that. When a test passes without your fix, the test is not reproducing the bug yet (this happened twice; see Gotchas).
 
 ```
-./run.sh test     # all eleven headless suites, about a minute, exit 0 = pass
+./run.sh test     # all twelve headless suites, about a minute, exit 0 = pass
 ./run.sh rendercheck   # draws every screen for real, fails on engine errors (needs a display)
 SIMMO_SEED=3 ./run.sh test   # same with another seed; loop a few seeds to catch flaky checks
 ./run.sh          # play
@@ -83,7 +83,8 @@ Output goes to `screenshots/` (gitignored), now at the window's full resolution.
 | `scripts/projectile.gd`, `scripts/fx.gd`, `scripts/float_text.gd` | Bolts, lobs, kunai (with lights, target leading); lightning, bursts, cones, afterimages, warp rings |
 | `scripts/game_input.gd`, `scripts/log.gd` | Key and controller bindings; colored logging |
 | `data/*.json` | `balance` (tuning), `maps`, `items`, `loot`, `appearance`, `chat` |
-| `tests/*.gd` | smoke, magic, world, party, items, class, combat_ai, social, environment, menu, boss |
+| `assets/sprites/<name>/` | PixelLab sprites: stills (`east.png`, `west.png`, `south.png`) and east-facing clips in `anims/<anim>/frame_NNN.png` (idle, walk, jump, attack_slash / _stab / _throw / _cast; west mirrors). A look with `"sprite": "<name>"` draws them instead of the code-drawn doll (creator rows "Sprite (test)" and "Sprite hair") |
+| `tests/*.gd` | smoke, magic, world, party, items, class, combat_ai, social, environment, menu, boss, sprite |
 | `tools/*.gd` | Screenshots, `soak.gd`, `boss_probe.gd` |
 
 ## Gotchas learned the hard way
@@ -111,6 +112,9 @@ Output goes to `screenshots/` (gitignored), now at the window's full resolution.
 - **"ObjectDB instances were leaked at exit" from the screenshot tools** is audio playbacks still running when a tool quits mid-sound (engine shutdown order). Harmless and tool-only; the game's normal exit is clean.
 - **Frame rate independence:** Anything that changes game state runs in `_physics_process` (fixed 60 Hz). `_process` is for visuals only and must never touch the global RNG (use a private `RandomNumberGenerator`, like `Chatter.rng` and `MapEnvironment._rng`), or frame rate shifts every later crit and loot roll. After a teleport call `reset_physics_interpolation()`. `./run.sh test` runs the FPS probe at four rates and compares fingerprints.
 - **Doll art:** MapleStory style built from convex pieces: `_shape` (fill + antialiased outline in `_ol(color)`), `_ellipse`, `_capsule`, `_rrect`, `_lock` for hair locks, `_strand` for physics hair, `_ribbon` for cloth. Keep every filled polygon convex or simple; anything built from physics points goes through `_ribbon` or `_strand`. Hair and hats must stop above the eyes (cap hairline at y -6 on the face side).
+- **PixelLab sprites:** Generated with the PixelLab MCP (side view, standard mode, 64 px = 1 generation; the owner's trial has 40). They come with a near-white fringe from background removal; `Doll._clean_sprite` turns near-white edge pixels into the dark outline at load. Drawn at 0.5 world px per sprite px (64 px tall = 32 world px), so they're pixel-exact at 1440p and 4K and slightly uneven at 1080p. `run.sh` re-imports when a .png is newer than the class cache.
+- **Sprite animations:** `Doll` picks the clip from state (attack by weapon via `Actor.sprite_attack()`: thrown = throw, `motion: thrust` = stab, `spell_power` = cast, else slash; then jump by `vy`, walk by `walk` phase, idle). Each clip anchors at the feet of its own first frame, because v3 clips come on bigger canvases (112 px). Squash / stretch and lean are code-side springs (`_tick_sprite`, `jolt`). Sprites never get the drawn weapon (`draws_weapon()`); slashes and stabs get a fading trail. `sprite_hair` is a palette swap over the hair's hue window (0.94 to 0.985, saturation 0.3 to 0.72, value 0.55+), tuned so the dress and boots stay put; a new sprite needs its own window. Check `tools/screenshot_sprite_anims.gd` after adding clips: PixelLab templates sometimes turn the character around (the fireball wind-up did; those frames were dropped).
+- **PixelLab budget:** The trial runs one job at a time (queue the next after `wait_for_jobs`). Template clips cost 1 per direction, v3 at this size 1 to 2; generate east only and mirror. `create_character_state` (outfits) costs 10, a new `create_character` 1.
 - **Fixed seeds hide flakes:** A check that passes on the default seed can fail on others (happened twice in M1: a mob parked next to a mid-jump player, and combo dummies that were only "tough" for a level 1 player). Loop `SIMMO_SEED`.
 
 ## Rules the game currently follows (keep them unless the owner changes them)

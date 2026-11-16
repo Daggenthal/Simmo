@@ -44,6 +44,8 @@ func rows() -> Array:
 		["hat_color", "Hat color", "cloth_colors"],
 		["cape", "Cape", "capes"],
 		["cape_color", "Cape color", "cloth_colors"],
+		["sprite", "Sprite (test)", "sprites"],
+		["sprite_hair", "Sprite hair", "sprite_hair"],
 	]
 
 func _ready() -> void:

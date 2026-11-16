@@ -37,7 +37,7 @@ func _init(lk: Dictionary = {}) -> void:
 static func normalize(lk: Dictionary) -> Dictionary:
 	var d := {"gender": "male", "skin": "#f2c27b", "face": "calm", "eye_color": "#2a2a3a", "hair": "short", "hair_color": "#4a3426",
 		"top": "tee", "top_color": "#c0392b", "bottom": "pants", "bottom_color": "#3b4a6b", "shoes": "boots", "shoes_color": "#4a3426",
-		"hat": "none", "hat_color": "#9aa3ad", "cape": "none", "cape_color": "#c0392b"}
+		"hat": "none", "hat_color": "#9aa3ad", "cape": "none", "cape_color": "#c0392b", "sprite": "none", "sprite_hair": "original"}
 	if lk.has("shirt"):
 		d.top_color = lk.shirt
 	if lk.has("pants"):
@@ -58,6 +58,167 @@ static func normalize(lk: Dictionary) -> Dictionary:
 func set_look(lk: Dictionary) -> void:
 	look = normalize(lk)
 	_build_chains()
+	_load_sprite()
+
+# --- sprites (PixelLab art) ---
+# A look with "sprite": "<name>" draws PixelLab art from res://assets/sprites/<name>/ instead of the
+# code-drawn body: east.png / west.png stills, and animations in anims/<anim>/frame_000.png ...
+# (east-facing; facing left mirrors them). Scaled so a sprite pixel is half a world pixel (a 64 px
+# character stands 32 world px tall, like the drawn ones), feet on the ground.
+#   idle, walk, jump                      by movement
+#   attack_slash / _stab / _throw / _cast by weapon while attacking (see Actor.sprite_attack)
+# Missing animations fall back to the still. On top runs free secondary motion: a squash and stretch
+# spring (jumps, landings, hits), a lean into runs and an idle sway.
+# "sprite_hair": a hex color recolors the pink hair (a palette swap); "original" keeps it.
+
+const SPRITE_SCALE := 0.5
+const SPRITE_ANIMS := ["idle", "walk", "jump", "attack_slash", "attack_stab", "attack_throw", "attack_cast"]
+const ANIM_FPS := {"idle": 5.0, "jump": 12.0}
+static var _sprite_cache: Dictionary = {}   # "<name>|<hair>" -> {still_e, still_w, rect, anims}
+var _sprite: Dictionary = {}
+## Set by the actor each frame: {"kind": "attack_slash", "t": 0..1} while attacking, else {}.
+var action: Dictionary = {}
+var _anim_t := 0.0
+var _sq := 0.0         # squash (+) / stretch (-), a damped spring
+var _sq_v := 0.0
+var _lean := 0.0
+var _was_air := false
+
+func _load_sprite() -> void:
+	_sprite = {}
+	var name := String(look.get("sprite", "none"))
+	if name == "none" or name == "":
+		return
+	var hair := String(look.get("sprite_hair", "original"))
+	var key := "%s|%s" % [name, hair]
+	if _sprite_cache.has(key):
+		_sprite = _sprite_cache[key]
+		return
+	var dir := "res://assets/sprites/%s/" % name
+	if not ResourceLoader.exists(dir + "east.png") or not ResourceLoader.exists(dir + "west.png"):
+		Log.warn("Sprite '%s' not found in %s, using the drawn character" % [name, dir])
+		return
+	var recolor := Color(hair) if hair.begins_with("#") else Color(0, 0, 0, 0)
+	var east := _process_frame(load(dir + "east.png"), recolor)
+	var west := _process_frame(load(dir + "west.png"), recolor)
+	var anims := {}
+	for a in SPRITE_ANIMS:
+		var frames: Array = []
+		for k in 64:
+			var f := dir + "anims/%s/frame_%03d.png" % [a, k]
+			if not ResourceLoader.exists(f):
+				break
+			frames.append(_process_frame(load(f), recolor))
+		if not frames.is_empty():
+			# Clips can sit on bigger canvases (a slash needs room), so each one keeps its own
+			# anchor: the feet in its first frame, which is the standing pose.
+			var used: Rect2i = frames[0].get_image().get_used_rect()
+			anims[a] = {"frames": frames, "feet": Vector2(used.position.x + used.size.x / 2.0, used.end.y)}
+	_sprite = {"still_e": east, "still_w": west, "rect": east.get_image().get_used_rect(), "anims": anims}
+	_sprite_cache[key] = _sprite
+
+static func _process_frame(tex: Texture2D, hair: Color) -> Texture2D:
+	var img := tex.get_image()
+	if img.is_compressed():
+		img.decompress()
+	img.convert(Image.FORMAT_RGBA8)
+	if hair.a > 0.0:
+		_recolor_hair(img, hair)
+	return _clean_sprite(img)
+
+## Palette swap: pink / magenta pixels (the hair, ribbons' shading aside) take the target hue,
+## keeping their own light and dark so the shading survives.
+static func _recolor_hair(img: Image, target: Color) -> void:
+	for y in img.get_height():
+		for x in img.get_width():
+			var c := img.get_pixel(x, y)
+			# Hair: pink, hue 0.94-0.985, saturation under 0.72. The dress's dark red (#931f26,
+			# hue 0.99, saturation 0.79), the skin and the dark boot shading (#6a3541, value 0.42) stay outside.
+			if c.a <= 0.01 or c.s < 0.3 or c.s > 0.72 or c.v < 0.55:
+				continue
+			if c.h > 0.94 and c.h < 0.985:
+				var v := clampf(c.v / 0.88 * target.v, 0.0, 1.0)
+				var sat := clampf(target.s * (0.6 + c.s * 0.6), 0.0, 1.0)
+				img.set_pixel(x, y, Color.from_hsv(target.h, sat, v, c.a))
+
+## Generated sprites can come with a near-white fringe left over from background removal, which shows
+## as a halo against the grass. Turn near-white pixels on the silhouette's edge into the dark outline
+## color, so every sprite reads with a clean dark outline (the files on disk stay as they are).
+static func _clean_sprite(img: Image) -> Texture2D:
+	var src: Image = img.duplicate()
+	var outline := Color(0.12, 0.1, 0.14, 1.0)
+	var w := img.get_width()
+	var h := img.get_height()
+	for y in h:
+		for x in w:
+			var c := src.get_pixel(x, y)
+			if c.a <= 0.01 or c.v < 0.8 or c.s > 0.25:
+				continue
+			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var q := Vector2i(x, y) + d
+				if q.x < 0 or q.y < 0 or q.x >= w or q.y >= h or src.get_pixelv(q).a <= 0.01:
+					img.set_pixel(x, y, outline)
+					break
+	return ImageTexture.create_from_image(img)
+
+func has_sprite() -> bool:
+	return not _sprite.is_empty()
+
+func has_anim(a: String) -> bool:
+	return has_sprite() and _sprite.anims.has(a)
+
+## A jolt on the squash spring (hits, big landings).
+func jolt(amount: float) -> void:
+	_sq_v += amount
+
+## Secondary motion for sprites: squash on landing, stretch on takeoff, lean into runs.
+func _tick_sprite(delta: float, vel: Vector2, on_floor: bool) -> void:
+	_anim_t += delta
+	if on_floor and _was_air:
+		_sq_v += clampf(absf(vy) / 380.0, 0.2, 1.0) * 6.0
+	elif not on_floor and not _was_air and vel.y < -100.0:
+		_sq_v -= 4.5
+	_was_air = not on_floor
+	# Spring back to rest, slightly underdamped so it bounces once.
+	_sq_v += (-_sq * 180.0 - _sq_v * 11.0) * delta
+	_sq = clampf(_sq + _sq_v * delta, -0.25, 0.25)
+	_lean = move_toward(_lean, clampf(vel.x / 110.0, -1.0, 1.0) * 0.07 * (1.0 if on_floor else 0.4), delta * 0.6)
+
+## Which frame to show now, and where its feet are: [texture, feet].
+func _sprite_frame() -> Array:
+	var anims: Dictionary = _sprite.anims
+	var name := ""
+	var u := 0.0
+	if not action.is_empty() and anims.has(String(action.kind)):
+		name = String(action.kind)
+		u = clampf(float(action.t), 0.0, 0.999)
+	elif airborne and anims.has("jump"):
+		name = "jump"
+		u = clampf(0.5 + vy / 700.0, 0.0, 0.999)   # rising: first half, falling: second half
+	elif speed_frac > 0.15 and anims.has("walk"):
+		name = "walk"
+		u = fmod(walk / TAU, 1.0)
+	elif anims.has("idle"):
+		name = "idle"
+		u = fmod(_anim_t * float(ANIM_FPS.idle) / anims.idle.frames.size(), 1.0)
+	if name == "":
+		var r: Rect2i = _sprite.rect
+		return [_sprite.still_e, Vector2(r.position.x + r.size.x / 2.0, r.end.y)]
+	var fr: Array = anims[name].frames
+	return [fr[int(u * fr.size()) % fr.size()], anims[name].feet]
+
+## The sprite with its feet at (0,0), mirrored when facing left, with squash, lean and sway.
+func _draw_sprite(ci: CanvasItem, at: Vector2, zoom: float) -> void:
+	var pick := _sprite_frame()
+	var tex: Texture2D = pick[0]
+	var feet: Vector2 = pick[1]
+	var s := SPRITE_SCALE * zoom
+	var sway := sin(t * 1.6) * 0.012 if speed_frac < 0.1 and not airborne and action.is_empty() else 0.0
+	var scale := Vector2(s * (1.0 + _sq) * float(facing), s * (1.0 - _sq))
+	# Lean follows the velocity's sign (forward when running either way); sway is a small idle rock.
+	ci.draw_set_transform(at, _lean + sway, scale)
+	ci.draw_texture(tex, -feet)
+	ci.draw_set_transform(Vector2.ZERO)
 
 func c(key: String) -> Color:
 	return Color(look.get(key, "#ff00ff"))
@@ -185,6 +346,8 @@ func update(delta: float, pos: Vector2, vel: Vector2, on_floor: bool, face: int)
 	for name in chains:
 		_simulate(chains[name], minf(delta, 1.0 / 30.0))
 	lights = Lighting.near(pos + Vector2(0, -16), 2)
+	if has_sprite():
+		_tick_sprite(delta, vel, on_floor)
 
 func is_blinking() -> bool:
 	return blink_left > 0.0 and String(look.face) != "cheery"
@@ -265,6 +428,9 @@ func _shaded(ci: CanvasItem, poly: PackedVector2Array, fill: Color, shade: Packe
 ## Body, in the canvas item's local space (feet at 0,0). hand: world-local position of the weapon hand.
 ## at / zoom place and enlarge it for previews (character creator, class cards).
 func draw(ci: CanvasItem, hand: Vector2, at := Vector2.ZERO, zoom := 1.0) -> void:
+	if has_sprite():
+		_draw_sprite(ci, at, zoom)
+		return
 	ci.draw_set_transform(at, 0.0, Vector2(U, U) * zoom)
 	var f := float(facing)
 	var bob := _bob()
@@ -306,6 +472,8 @@ func draw(ci: CanvasItem, hand: Vector2, at := Vector2.ZERO, zoom := 1.0) -> voi
 
 ## The hand over the weapon grip (drawn after the weapon).
 func draw_hand(ci: CanvasItem, hand: Vector2, at := Vector2.ZERO, zoom := 1.0) -> void:
+	if has_sprite():
+		return
 	ci.draw_set_transform(at, 0.0, Vector2(U, U) * zoom)
 	_hand(ci, _u(origin + hand), float(facing), false)
 	ci.draw_set_transform(Vector2.ZERO)

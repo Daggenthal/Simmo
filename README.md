@@ -110,6 +110,8 @@ Day and night (8 minutes), with sun, moon and stars. Weather cycles through clea
 
 Characters blink now and then, walk with a swing, tuck their legs when jumping, and have hair and cloth physics.
 
+Sprite test: the creator's "Sprite (test)" row swaps the drawn character for a PixelLab pixel-art heroine with idle, walk and jump animations and an attack for each weapon (sword slash, dagger stab, kunai throw, staff cast). She squashes on landing, stretches on takeoff, leans into runs and flinches when hit. "Sprite hair" recolors her hair.
+
 ## Sound
 
 Every sound is synthesized in code: hits, crits, swings, footsteps, jumps, landings, spell casts by element, potions, loot, level ups, ultimates, warps, splashes, boss roars, the chest, thunder, and rain and wind ambience. The pause menu has master, effects and ambient volume and mute.

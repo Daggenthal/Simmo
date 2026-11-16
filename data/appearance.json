@@ -110,5 +110,25 @@
     "#3b4a6b",
     "#2f4f3f",
     "#1c1c1c"
+  ],
+  "sprites": [
+    "none",
+    "test_heroine"
+  ],
+  "_doc_sprites": "PixelLab sprites in assets/sprites/<name>/ (east.png, west.png). 'none' uses the drawn character.",
+  "sprite_hair": [
+    "original",
+    "#2b1d14",
+    "#4a3426",
+    "#8a5a2a",
+    "#c98f2a",
+    "#f2e2a0",
+    "#e0e0e0",
+    "#c43b3b",
+    "#e86aa0",
+    "#3a6ad0",
+    "#7a4ab0",
+    "#4a8a3a",
+    "#1c1c1c"
   ]
 }

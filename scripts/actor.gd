@@ -180,6 +180,8 @@ var _regen_acc := 0.0
 # Speech bubble over the head when a Simmo talks in party chat.
 var bubble_text := ""
 var _step_t := 0.0
+## Which sprite attack animation the current swing or cast plays (PixelLab sprites).
+var _action_kind := "attack_slash"
 var _was_on_floor := true
 var _bubble_t := 0.0
 # Zone warp: frozen in place while the rings play; the body fades out (leaving) or in (arriving).
@@ -548,6 +550,21 @@ func _footsteps(delta: float) -> void:
 	else:
 		_step_t = 0.0
 
+## The sprite attack animation for the weapon in hand: swords and hammers slash, daggers stab,
+## kunai are thrown, staffs and scepters cast.
+func sprite_attack() -> String:
+	if weapon.get("thrown", false):
+		return "attack_throw"
+	if String(weapon.get("motion", "")) == "thrust":
+		return "attack_stab"
+	if weapon.has("spell_power"):
+		return "attack_cast"
+	return "attack_slash"
+
+## Code-drawn characters hold a drawn weapon; sprites carry their own in the art (in every clip).
+func draws_weapon() -> bool:
+	return not doll.has_sprite()
+
 func can_ultimate() -> bool:
 	return not ult.is_empty() and ult_cd <= 0.0 and mp >= float(ult.get("mp", 0)) and _channel_t <= 0.0 and _shadow_queue.is_empty()
 
@@ -709,6 +726,7 @@ func cast(id: String) -> bool:
 		cast_log.pop_front()
 	_swing_time = 0.18
 	_swing_len = 0.18
+	_action_kind = "attack_cast"
 	var cast_sound := "cast_%s" % String(sp.element)
 	if Sfx.has_method("_gen_" + cast_sound):
 		sfx(cast_sound, 0.7)
@@ -984,6 +1002,7 @@ func attack() -> void:
 	_swing_time = _swing_len
 	_pending_hit = float(weapon.windup) * scale
 	swings += 1
+	_action_kind = sprite_attack()
 	sfx("swing", 0.5, randf_range(0.9, 1.15) * (0.8 if float(weapon.cooldown) > 1.0 else 1.0))
 	if _pending_hit <= 0.0:
 		_land_attack()
@@ -1135,6 +1154,7 @@ func take_damage(amount: int, from_x: float) -> void:
 	hp = max(hp - amount, 0)
 	_invuln = float(cfg.invuln_time)
 	sfx("player_hurt", 0.8)
+	doll.jolt(5.0)
 	velocity = Vector2(sign(global_position.x - from_x) * 140.0, -150.0)
 	FloatText.spawn(get_parent(), global_position + Vector2(0, -H - 4), str(amount), Color("#ff6b6b"))
 	stats_changed.emit()
@@ -1256,8 +1276,22 @@ func _draw() -> void:
 		tip = hand + Vector2(facing * length * 0.35, -length * 0.85)
 	if _regen_t_visual():
 		_draw_regen()
+	doll.action = {"kind": _action_kind, "t": 1.0 - _swing_time / maxf(_swing_len, 0.01)} if _swing_time > 0.0 else {}
 	doll.draw(self, hand)
-	draw_weapon_shape(self, weapon_key, weapon, hand, tip)
+	if not draws_weapon():
+		# The sprite holds its own weapon, so no drawn weapon on top. Melee swings get a trail that
+		# fades out (the clips can hide the blade mid-swing); casts and throws show their projectile.
+		if _swing_time > 0.0 and _action_kind in ["attack_slash", "attack_stab"]:
+			var sw := 1.0 - _swing_time / _swing_len
+			var trail := Color(1, 1, 1, 0.6 * (1.0 - sw))
+			if _action_kind == "attack_stab":
+				var x0 := 6.0 + 10.0 * sw
+				draw_line(Vector2(facing * x0, -11), Vector2(facing * (x0 + 12.0), -11), trail, 2.0, true)
+			else:
+				var a0 := -PI / 2 * facing + (0.0 if facing > 0 else PI)
+				draw_arc(Vector2(facing * 4, -12), 14.0, a0, a0 + PI * sw * facing, 10, trail, 2.0, true)
+	else:
+		draw_weapon_shape(self, weapon_key, weapon, hand, tip)
 	doll.draw_hand(self, hand)
 	_draw_tag()
 	_draw_bubble()
@@ -1363,7 +1397,7 @@ static func draw_preview(ci: CanvasItem, d: Doll, key: String, w: Dictionary, at
 	var face := d.facing
 	var hand := Vector2(face * 6, -12)
 	d.draw(ci, hand, at, zoom)
-	if not w.is_empty():
+	if not w.is_empty() and not d.has_sprite():
 		ci.draw_set_transform(at, 0.0, Vector2(zoom, zoom))
 		var length := float(w.get("length", 16))
 		draw_weapon_shape(ci, key, w, hand, hand + Vector2(face * length * 0.35, -length * 0.85))

@@ -38,7 +38,7 @@ echo "${GREEN}Using Godot:${RESET} $GODOT_BIN ($("$GODOT_BIN" --version 2>/dev/n
 # Import on first run, and again whenever a script is newer than Godot's class cache,
 # so new class_name scripts resolve when running from the terminal.
 CACHE=.godot/global_script_class_cache.cfg
-if [[ ! -f "$CACHE" ]] || [[ -n "$(find . -name '*.gd' -newer "$CACHE" -not -path './.godot/*' -print -quit)" ]]; then
+if [[ ! -f "$CACHE" ]] || [[ -n "$(find . \( -name '*.gd' -o -name '*.png' \) -newer "$CACHE" -not -path './.godot/*' -not -path './screenshots/*' -print -quit)" ]]; then
 	echo "${YELLOW}Scripts changed, re-importing project...${RESET}"
 	"$GODOT_BIN" --headless --import --path . >/dev/null 2>&1
 	touch "$CACHE"
@@ -50,7 +50,7 @@ case "${1:-play}" in
 	editor) exec "$GODOT_BIN" --editor --path . ;;
 	test)
 		code=0
-		for t in smoke_test magic_test world_test party_test items_test class_test combat_ai_test social_test environment_test menu_test boss_test; do
+		for t in smoke_test magic_test world_test party_test items_test class_test combat_ai_test social_test environment_test menu_test boss_test sprite_test; do
 			"$GODOT_BIN" --headless --fixed-fps 60 --path . --script "res://tests/$t.gd"
 			c=$?
 			if [[ $c -eq 0 ]]; then echo "${GREEN}$t passed${RESET}"; else echo "${RED}$t failed (exit $c)${RESET}"; code=1; fi
