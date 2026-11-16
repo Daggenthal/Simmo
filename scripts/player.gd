@@ -4,7 +4,8 @@ extends Actor
 ## Manual input takes over movement, but auto keeps swinging at anything in front;
 ## auto resumes after auto_pause_after_input with a fresh target.
 ## Owns the inventory: potions (R / F or click in the I window) and XP tonics.
-## During auto-battle it drinks potions on its own when HP or MP runs low.
+## During auto-battle it drinks potions on its own when HP or MP runs low, and once you reach
+## the next map's level it walks to that map's portal and goes through (auto_advance_zones).
 
 var auto_battle := false
 var _auto_pause := 0.0
@@ -13,6 +14,8 @@ var inventory: Inventory
 var item_cfg: Dictionary = {}
 var items_used := 0
 var _item_cd := 0.0
+## Name of the map auto-battle is heading to, or "" (shown on the HUD).
+var advancing_to := ""
 
 ## items: data/items.json. Fills the starter kit.
 func setup_items(items: Dictionary) -> void:
@@ -119,7 +122,12 @@ func _get_intent(delta: float) -> Dictionary:
 			# Pick a fresh target from wherever the player steered to.
 			_auto_was_manual = false
 			brain.target = null
-		intent = brain.think(delta)
+		var portal := next_zone_portal()
+		if not portal.is_empty():
+			intent = _advance(portal, delta)
+		else:
+			advancing_to = ""
+			intent = brain.think(delta)
 	elif _mob_in_front():
 		intent.attack = true
 	return intent
@@ -143,6 +151,32 @@ func _read_manual() -> Dictionary:
 func _spell_by_slot(n: int) -> String:
 	var keys := spells.keys()
 	return keys[n] if n < keys.size() else ""
+
+## The portal to the next map once you meet its level (only forward, never back), or {}.
+func next_zone_portal() -> Dictionary:
+	if world == null or not bool(cfg.get("auto_advance_zones", false)):
+		return {}
+	var here: Array = world.map.get("levels", [0, 0])
+	for p in world.portals:
+		var dest: Dictionary = world.maps.get(String(p.to), {})
+		var lv: Array = dest.get("levels", [])
+		if lv.size() == 2 and int(lv[0]) > int(here[0]) and level >= int(lv[0]):
+			return p
+	return {}
+
+## Walk to the portal along the nav graph (still swinging at anything in the way), then take it.
+func _advance(portal: Dictionary, delta: float) -> Dictionary:
+	var dest_name := String(world.maps[String(portal.to)].name)
+	if advancing_to != dest_name:
+		advancing_to = dest_name
+		Log.ok("Auto-battle: level %d reached, heading to %s" % [level, dest_name])
+	var pp := world.portal_pos(portal)
+	if is_on_floor() and not world.portal_at(global_position).is_empty() and absf(global_position.x - pp.x) <= 8.0:
+		world.travel(portal)
+		return Actor.blank_intent()
+	var i := brain.go_to(world.nav.surface_at(pp.x, pp.y), pp.x, delta)
+	i.attack = _mob_in_front()
+	return i
 
 func set_auto_battle(on: bool) -> void:
 	auto_battle = on

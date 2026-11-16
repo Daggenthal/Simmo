@@ -156,8 +156,10 @@ func _on_mob_killed(mob: Mob, attacker: Node2D) -> void:
 ## Items a kill of `mob` drops (each loot entry rolls once).
 func roll_loot(mob: Mob) -> Array:
 	var got: Array = []
+	# The player's LUK raises every drop chance.
+	var luck: float = party[0].drop_mult() if not party.is_empty() and is_instance_valid(party[0]) else 1.0
 	for e in loot_table:
-		if mob.level >= int(e.get("min_level", 0)) and randf() < float(e.chance):
+		if mob.level >= int(e.get("min_level", 0)) and randf() < float(e.chance) * luck:
 			got.append(String(e.item))
 	return got
 
@@ -227,10 +229,16 @@ func portal_at(pos: Vector2) -> Dictionary:
 	return {}
 
 ## Take a portal at the end of this frame (map changes mid-physics are not safe).
+var _travel_pending := false
+
 func travel(portal: Dictionary) -> void:
+	if _travel_pending:
+		return
+	_travel_pending = true
 	_do_travel.call_deferred(portal)
 
 func _do_travel(portal: Dictionary) -> void:
+	_travel_pending = false
 	var to := String(portal.to)
 	if not maps.has(to):
 		Log.warn("Portal leads to unknown map '%s'" % to)

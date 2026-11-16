@@ -35,6 +35,8 @@ func _initialize() -> void:
 	WorldS = load("res://scripts/world.gd")
 	_main = load("res://main.tscn").instantiate()
 	_main.spawn_sims = false
+	_main.show_start_screen = false
+	_main.start_class = "mage"
 	root.add_child(_main)
 
 func _check(cond: bool, msg: String) -> void:
@@ -168,7 +170,7 @@ func _physics_process(_d: float) -> bool:
 				p.position = Vector2(500, 330)
 				p.velocity = Vector2.ZERO
 				p.facing = 1
-				p.equip("throwing_kunai")
+				p.switch_to_weapon_class("throwing_kunai")
 				p.imbue_element = ""
 				_m = _dummy(0, Vector2(630, 329))
 				_hp0 = _m.hp
@@ -188,7 +190,7 @@ func _physics_process(_d: float) -> bool:
 				var pr = p.last_projectile
 				var w: Dictionary = _bal.weapons.throwing_kunai
 				_check(pr.element == "frost" and is_equal_approx(float(pr.opts.proc), float(w.imbue_chance)), "kunai imbued with last spell's element (%s, %.0f%% proc)" % [pr.element, 100.0 * float(pr.opts.proc)])
-				p.equip("short_sword")
+				p.set_class(_bal, "mage")
 				p.imbue_element = ""
 				_goto("weave")
 		"weave":
@@ -226,13 +228,12 @@ func _physics_process(_d: float) -> bool:
 			if _pf == 1:
 				_park_all()
 				# Tough means tough for a level 1 player; earlier phases level the player up.
-				p.level = 1
+				p.set_level(1)
 				_dummy(0, Vector2(560, 329), 600)
 				_dummy(1, Vector2(590, 329), 600)
 				p.position = Vector2(470, 330)
 				p.velocity = Vector2.ZERO
 				p.mp = p.max_mp
-				p.equip("short_sword")
 				Comb.combo_counts.clear()
 				p.set_auto_battle(true)
 			if _pf == 1800:
@@ -381,7 +382,7 @@ func _test_weave(p) -> void:
 	var cases := [["throwing_kunai", 350.0], ["short_sword", 250.0]]
 	if _weave_case >= cases.size():
 		p.set_auto_battle(false)
-		p.equip("short_sword")
+		p.set_class(_bal, "mage")
 		_goto("auto")
 		return
 	var c: Array = cases[_weave_case]
@@ -390,7 +391,7 @@ func _test_weave(p) -> void:
 		_m = _dummy(0, Vector2(450 + c[1], 329), 5000)
 		p.position = Vector2(450, 330)
 		p.velocity = Vector2.ZERO
-		p.equip(c[0])
+		p.switch_to_weapon_class(c[0])
 		p.mp = p.max_mp
 		p._cast_cd = 0.0
 		for k in p.spell_cd:

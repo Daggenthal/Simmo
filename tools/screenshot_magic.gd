@@ -8,6 +8,8 @@ func _initialize() -> void:
 	root.size = Vector2i(1280, 720)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://screenshots"))
 	_main = load("res://main.tscn").instantiate()
+	_main.show_start_screen = false
+	_main.start_class = "mage"
 	root.add_child(_main)
 func _process(_d: float) -> bool:
 	_f += 1
@@ -43,7 +45,7 @@ func _process(_d: float) -> bool:
 		p.spell_cd.chain_lightning = 0.0
 		p.mp += 12
 		p.cast("chain_lightning")
-		p.equip("throwing_kunai")
+		p.switch_to_weapon_class("throwing_kunai")
 		p.imbue_element = "lightning"
 	if _f == 90:
 		for k in 4:

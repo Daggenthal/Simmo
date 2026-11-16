@@ -15,24 +15,19 @@ func setup_sim(info: Dictionary, balance: Dictionary, leader: Actor, spawn: Vect
 	var mult := float(role_cfg.get("hp_mult", 1.0))
 	c.max_hp = int(round(float(c.max_hp) * mult))
 	c.hp_per_level = int(round(float(c.hp_per_level) * mult))
-	c.starting_weapon = String(role_cfg.get("weapon", c.starting_weapon))
-	c.spells = role_cfg.get("spells", [])
 	c.look = info.get("look", {})
 	c.auto_use_spells = true
 	setup(c, spawn, balance.weapons, balance.get("spells", {}))
 	display_name = String(info.get("name", "Sim"))
+	# Role picks the class, weapon and skills (e.g. the healer is a Mage with Heal).
+	set_class(balance, String(role_cfg.get("class", "warrior")), String(role_cfg.get("weapon", "")), role_cfg.get("spells", []))
 	tag_color = Color(role_cfg.get("color", "#ffffff"))
 	brain.leader = leader
 	brain.role = role
 	brain.role_cfg = role_cfg
 	brain.party_cfg = balance.get("party", {})
 	# Start at the leader's level so the party fights the same mobs.
-	while level < leader.level:
-		level += 1
-		max_hp += int(cfg.hp_per_level)
-		max_mp += int(cfg.get("mp_per_level", 0))
-	hp = max_hp
-	mp = max_mp
+	set_level(leader.level)
 
 func _ready() -> void:
 	super()

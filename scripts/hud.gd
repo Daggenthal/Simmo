@@ -12,12 +12,13 @@ var _warning_t := 0.0
 var show_help := true
 const HELP_LINES := [
 	"Move: Arrows / WASD    Jump: Alt / Space    Attack: Ctrl / J",
-	"Drop down: Down + Jump    Auto-battle: Q / Tab    Weapons: 1-4 or E",
-	"Spells: Z Fire   X Frost   C Venom   V Lightning",
+	"Drop down: Down + Jump    Auto-battle: Q / Tab    Weapons: 1-2 or E",
+	"Skills: Z / X / C / V    Stats: K",
 	"Portal: stand on it + Up    Party on/off: P",
 	"Inventory: I    HP potion: R    MP potion: F",
 	"Respawn mobs: F5    Debug: F3    Hide this: F1",
 ]
+const SLOT_KEYS := ["Z", "X", "C", "V"]
 var _font: Font
 var _auto_btn: Button
 
@@ -48,12 +49,13 @@ func on_map_entered() -> void:
 	warning_danger = world.danger(world.map_id, player.level)
 	if warning_danger == "":
 		return
-	var lv: Array = world.map.levels
-	if warning_danger == "deadly":
-		warning_text = "Danger: mobs here are Lv %d-%d and you're Lv %d. They can take you down fast." % [lv[0], lv[1], player.level]
-	else:
-		warning_text = "Warning: mobs here are Lv %d-%d and you're Lv %d. Expect a harder fight." % [lv[0], lv[1], player.level]
+	# Gap to the map's weakest mobs; the banner color still shows hard (orange) vs deadly (red).
+	warning_text = warning_for(int(world.map.levels[0]) - player.level)
 	_warning_t = float(world._balance.get("map_warning", {}).get("banner_time", 6.0))
+
+## "Warning! Mobs here are N level(s) above you", singular for one level.
+func warning_for(gap: int) -> String:
+	return "Warning! Mobs here are %d %s above you" % [gap, "level" if gap == 1 else "levels"]
 
 func _process(delta: float) -> void:
 	_hint_time = max(_hint_time - delta, 0.0)
@@ -82,6 +84,8 @@ func _draw() -> void:
 	var bar_h := 22.0
 	draw_rect(Rect2(0, vs.y - bar_h, vs.x, bar_h), Color(0.08, 0.09, 0.14, 0.85))
 	_text(Vector2(8, vs.y - 7), "Lv. %d" % player.level, Color("#ffd84a"), 11)
+	if player.ap > 0:
+		_text(Vector2(8, vs.y - 26), "AP %d: press K" % player.ap, Color("#ffd84a"), 8)
 	var hp_frac := float(player.hp) / player.max_hp
 	_bar(Rect2(46, vs.y - 17, 110, 11), hp_frac, Color("#e04848"), "HP %d / %d" % [player.hp, player.max_hp])
 	_bar(Rect2(160, vs.y - 17, 100, 11), player.mp / player.max_mp, Color("#4a8be0"), "MP %d / %d" % [int(player.mp), player.max_mp])
@@ -97,7 +101,9 @@ func _draw() -> void:
 	_draw_quick_slots(vs)
 	_draw_buffs(vs)
 	if player.auto_battle:
-		_text(Vector2(vs.x / 2.0 - 30, 16), "AUTO BATTLE", Color("#ffd84a"), 11)
+		var auto_label := "AUTO BATTLE" if player.advancing_to == "" else "AUTO: heading to %s" % player.advancing_to
+		var aw := _font.get_string_size(auto_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+		_text(Vector2((vs.x - aw) / 2.0, 16), auto_label, Color("#ffd84a"), 11)
 	# Map name and level range, top left
 	var map_name: String = world.map.get("name", "") if world else ""
 	var x := 8 + _font.get_string_size(map_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 8
@@ -209,7 +215,7 @@ func _draw_skill_bar(vs: Vector2) -> void:
 			var frac := cd / float(sp.cooldown)
 			draw_rect(Rect2(r.position, Vector2(size, size * frac)), Color(0, 0, 0, 0.6))
 		draw_rect(r, Color(1, 1, 1, 0.4), false, 1.0)
-		_text(r.position + Vector2(2, 9), String(sp.key), Color.WHITE, 8)
+		_text(r.position + Vector2(2, 9), SLOT_KEYS[n] if n < SLOT_KEYS.size() else "", Color.WHITE, 8)
 
 ## HP and MP potion quick slots (R / F), left of the skill bar: best potion's icon and total count.
 func _draw_quick_slots(vs: Vector2) -> void:
@@ -240,7 +246,8 @@ func _draw_buffs(vs: Vector2) -> void:
 	var y := vs.y - 28.0
 	for b in player.buffs.values():
 		var t := int(ceil(float(b.t)))
-		var label := "%s  XP +%d%%  %d:%02d" % [b.name, int(round((float(b.mult) - 1.0) * 100.0)), t / 60, t % 60]
+		var bonus: String = b.get("label", "XP +%d%%" % int(round((float(b.get("mult", 1.0)) - 1.0) * 100.0)))
+		var label := "%s  %s  %d:%02d" % [b.name, bonus, t / 60, t % 60]
 		draw_rect(Rect2(6, y - 8, 6, 6), Color(b.color))
 		_text(Vector2(15, y - 1), label, Color(b.color), 8)
 		y -= 11.0

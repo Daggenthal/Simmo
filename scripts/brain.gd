@@ -174,6 +174,13 @@ func _take_link(i: Dictionary, l: Dictionary) -> Dictionary:
 	Log.dbg("auto: %s from surface %d to %d" % [l.kind, l.from, l.to])
 	return i
 
+## Public: head for (surface, x) along the nav graph (used for walking to portals).
+func go_to(to_s: int, to_x: float, _delta: float) -> Dictionary:
+	var i := Actor.blank_intent()
+	if absf(to_x - a.global_position.x) <= 6.0 and a.is_on_floor() and a.world and a.world.nav.surface_at(a.global_position.x, a.global_position.y) == to_s:
+		return i
+	return _route_to(i, to_s, to_x)
+
 ## Head for (surface, x) along the nav graph.
 func _route_to(i: Dictionary, to_s: int, to_x: float) -> Dictionary:
 	if not a.is_on_floor():
@@ -182,7 +189,7 @@ func _route_to(i: Dictionary, to_s: int, to_x: float) -> Dictionary:
 	var x := a.global_position.x
 	var my_s := a.world.nav.surface_at(x, a.global_position.y) if a.world else -1
 	if my_s < 0 or to_s < 0 or my_s == to_s:
-		if absf(to_x - x) > 8.0:
+		if absf(to_x - x) > 4.0:
 			i.dir = signf(to_x - x)
 		return i
 	var route: Dictionary = a.world.nav.find_route(my_s, x, to_s, to_x)
@@ -289,7 +296,32 @@ func pick_spell(t: Mob) -> String:
 		var max_dy := 90.0 if sp.kind == "lob" else 22.0
 		if dist <= float(sp.range) and dy <= max_dy:
 			return id
+	# Class skills (warrior, rogue): use whatever is ready and fits the distance.
+	var reach := float(a.weapon.get("range", 30.0)) + Actor.W / 2.0 + t.size.x / 2.0
+	for id in a.spells:
+		var sp: Dictionary = a.spells[id]
+		if not a.can_cast(id):
+			continue
+		match String(sp.kind):
+			"strike":
+				if dist <= float(sp.range) + t.size.x / 2.0 and dy < 20.0 and _facing_ok(t):
+					return id
+			"slam":
+				if dist <= float(sp.radius) and dy < 20.0:
+					return id
+			"volley":
+				if dist <= float(sp.range) and dy < 90.0:
+					return id
+			"dash":
+				if dist >= reach * 0.8 and dist <= float(sp.distance) + reach and dy < 12.0 and a.is_on_floor():
+					return id
+			"buff":
+				if not a.buffs.has(id) and dist <= 140.0:
+					return id
 	return ""
+
+func _facing_ok(t: Mob) -> bool:
+	return signf(t.global_position.x - a.global_position.x) == float(a.facing) or absf(t.global_position.x - a.global_position.x) < 6.0
 
 static func is_combo_finisher(id: String, t: Mob) -> bool:
 	return (id == "chain_lightning" and t.is_frozen()) or (id == "fireball" and t.poison_stacks >= 3)

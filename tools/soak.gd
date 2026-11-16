@@ -14,6 +14,9 @@ var _kos := 0
 func _initialize() -> void:
 	_log = root.get_node("Log")
 	_main = load("res://main.tscn").instantiate()
+	_main.show_start_screen = false
+	var cls := OS.get_environment("SIMMO_CLASS")
+	_main.start_class = cls
 	root.add_child(_main)
 
 func _physics_process(_d: float) -> bool:
@@ -30,11 +33,9 @@ func _physics_process(_d: float) -> bool:
 			quit(0)
 			return false
 		_main.world.load_map(PLAN[_idx][0])
-		while p.level < int(PLAN[_idx][1]):
-			p.gain_xp(p.xp_to_next())
+		p.set_level(int(PLAN[_idx][1]))
 		for s in _main.sims:
-			while s.level < p.level:
-				s.gain_xp(s.xp_to_next())
+			s.set_level(p.level)
 		var k := 0
 		for a in _main.world.party:
 			a.arrive(_main.world.spawn_point)

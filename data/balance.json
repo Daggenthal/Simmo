@@ -11,7 +11,6 @@
     "max_fall": 420,
     "coyote_time": 0.1,
     "jump_buffer": 0.12,
-    "damage_per_level": 5,
     "crit_chance": 0.12,
     "crit_mult": 2.0,
     "invuln_time": 0.8,
@@ -19,7 +18,6 @@
     "xp_exponent": 1.8,
     "auto_retarget": 0.5,
     "auto_pause_after_input": 0.4,
-    "starting_weapon": "short_sword",
     "level_bonus_reference_cooldown": 0.8,
     "attack_speed_scale": 1.0,
     "auto_give_up_time": 5.0,
@@ -33,12 +31,6 @@
     "attack_blocks_cast": 0.3,
     "cast_locks_weapon": 0.4,
     "thrown_preferred_range": 0.6,
-    "spells": [
-      "fireball",
-      "frost_bolt",
-      "venom_glob",
-      "chain_lightning"
-    ],
     "look": {
       "skin": "#f2c27b",
       "hair": "#4a3426",
@@ -48,7 +40,11 @@
       "hat": ""
     },
     "auto_potion_hp_below": 0.35,
-    "auto_potion_mp_below": 0.2
+    "auto_potion_mp_below": 0.2,
+    "damage_per_point": 1.25,
+    "_doc_damage": "Damage bonus per point of the attack's stat above the class's starting value, scaled by cooldown / level_bonus_reference_cooldown. Auto-assign puts 4 points a level into the main stat, which matches the old 5 damage per level.",
+    "ap_per_level": 5,
+    "auto_advance_zones": true
   },
   "mobs": {
     "green_slime": {
@@ -275,7 +271,10 @@
       "knockback": 70,
       "max_targets": 1,
       "length": 11,
-      "color": "#cfd6dd"
+      "color": "#cfd6dd",
+      "stat": "dex",
+      "motion": "thrust",
+      "action": "Quick stabs straight ahead or angled up and down, 1 target"
     },
     "short_sword": {
       "name": "Short Sword",
@@ -289,7 +288,9 @@
       "knockback": 120,
       "max_targets": 2,
       "length": 20,
-      "color": "#dfe6ee"
+      "color": "#dfe6ee",
+      "stat": "str",
+      "action": "Swings an arc in front, hits up to 2"
     },
     "iron_hammer": {
       "name": "Iron Hammer",
@@ -303,7 +304,9 @@
       "knockback": 210,
       "max_targets": 4,
       "length": 22,
-      "color": "#8a8f99"
+      "color": "#8a8f99",
+      "stat": "str",
+      "action": "Slow wind-up smash, hits up to 4, big knockback"
     },
     "throwing_kunai": {
       "name": "Throwing Kunai",
@@ -322,7 +325,27 @@
       "throw_speed": 160,
       "gravity": 700,
       "imbue_chance": 0.5,
-      "imbue_strength": 0.5
+      "imbue_strength": 0.5,
+      "stat": "dex",
+      "action": "Thrown in an arc from range, carries your last spell's element"
+    },
+    "oak_staff": {
+      "name": "Oak Staff",
+      "speed_label": "Normal",
+      "cooldown": 0.9,
+      "windup": 0.12,
+      "damage_min": 12,
+      "damage_max": 16,
+      "range": 30,
+      "height": 26,
+      "knockback": 80,
+      "max_targets": 1,
+      "length": 22,
+      "color": "#9a6b3a",
+      "stat": "int",
+      "spell_power": 1.2,
+      "orb": "#8fd8ff",
+      "action": "Light bonk in front; boosts your spells by 20%"
     }
   },
   "spells": {
@@ -337,7 +360,9 @@
       "damage_max": 13,
       "speed": 240,
       "range": 180,
-      "color": "#ff7a2e"
+      "color": "#ff7a2e",
+      "stat": "int",
+      "desc": "Fire bolt. Burns, and thaws frozen mobs. On 3+ poison stacks it ignites them"
     },
     "frost_bolt": {
       "name": "Frost Bolt",
@@ -350,7 +375,9 @@
       "damage_max": 11,
       "speed": 220,
       "range": 180,
-      "color": "#8fd8ff"
+      "color": "#8fd8ff",
+      "stat": "int",
+      "desc": "Ice bolt. Slows, 25% chance to freeze"
     },
     "venom_glob": {
       "name": "Venom Glob",
@@ -365,7 +392,9 @@
       "gravity": 650,
       "range": 160,
       "splash": 22,
-      "color": "#7ed957"
+      "color": "#7ed957",
+      "stat": "int",
+      "desc": "Lobbed poison that splashes. Stacks up to 5"
     },
     "chain_lightning": {
       "name": "Chain Lightning",
@@ -380,7 +409,9 @@
       "chains": 3,
       "chain_range": 80,
       "chain_falloff": 0.75,
-      "color": "#ffe66b"
+      "color": "#ffe66b",
+      "stat": "int",
+      "desc": "Jumps between 4 mobs. Always crits frozen mobs"
     },
     "heal": {
       "name": "Heal",
@@ -393,7 +424,112 @@
       "heal_max": 18,
       "heal_per_level": 4,
       "range": 160,
-      "color": "#9dffb0"
+      "color": "#9dffb0",
+      "stat": "int",
+      "desc": "Heals an ally"
+    },
+    "power_strike": {
+      "name": "Power Strike",
+      "element": "physical",
+      "kind": "strike",
+      "stat": "str",
+      "mp": 5,
+      "cooldown": 4.0,
+      "damage_min": 40,
+      "damage_max": 50,
+      "range": 40,
+      "height": 30,
+      "max_targets": 1,
+      "knockback": 160,
+      "color": "#ffb347",
+      "desc": "One heavy hit in front, big knockback"
+    },
+    "ground_slam": {
+      "name": "Ground Slam",
+      "element": "physical",
+      "kind": "slam",
+      "stat": "str",
+      "mp": 8,
+      "cooldown": 7.0,
+      "damage_min": 26,
+      "damage_max": 34,
+      "radius": 60,
+      "max_targets": 6,
+      "knockback": 120,
+      "color": "#d9a066",
+      "desc": "Hits every mob around you"
+    },
+    "lucky_seven": {
+      "name": "Lucky Seven",
+      "element": "physical",
+      "kind": "volley",
+      "stat": "dex",
+      "mp": 5,
+      "cooldown": 3.0,
+      "damage_min": 16,
+      "damage_max": 22,
+      "count": 2,
+      "range": 170,
+      "throw_speed": 190,
+      "gravity": 600,
+      "color": "#e8e8f0",
+      "desc": "Throws 2 quick kunai at the target"
+    },
+    "war_cry": {
+      "name": "War Cry",
+      "element": "physical",
+      "kind": "buff",
+      "stat": "str",
+      "mp": 10,
+      "cooldown": 20.0,
+      "duration": 10.0,
+      "dmg_mult": 1.25,
+      "color": "#ff5a3a",
+      "desc": "+25% damage for 10 s"
+    },
+    "charge": {
+      "name": "Charge",
+      "element": "physical",
+      "kind": "dash",
+      "stat": "str",
+      "mp": 6,
+      "cooldown": 6.0,
+      "damage_min": 22,
+      "damage_max": 28,
+      "distance": 90,
+      "speed": 360,
+      "knockback": 180,
+      "color": "#ffd36b",
+      "desc": "Dash forward, hitting everything in your path"
+    },
+    "flurry": {
+      "name": "Flurry",
+      "element": "physical",
+      "kind": "strike",
+      "stat": "dex",
+      "mp": 5,
+      "cooldown": 4.0,
+      "damage_min": 10,
+      "damage_max": 14,
+      "hits": 3,
+      "range": 30,
+      "height": 24,
+      "max_targets": 1,
+      "knockback": 30,
+      "color": "#cfe8ff",
+      "desc": "Three quick stabs in front"
+    },
+    "haste": {
+      "name": "Haste",
+      "element": "physical",
+      "kind": "buff",
+      "stat": "dex",
+      "mp": 10,
+      "cooldown": 20.0,
+      "duration": 10.0,
+      "speed_mult": 1.3,
+      "color": "#7fe39b",
+      "desc": "Attack 30% faster for 10 s"
     }
   },
   "elements": {
@@ -458,32 +594,39 @@
     "tank": {
       "label": "Tank",
       "weapon": "iron_hammer",
-      "spells": [],
+      "spells": [
+        "power_strike",
+        "ground_slam",
+        "war_cry"
+      ],
       "hp_mult": 1.8,
       "follow_offset": 36,
-      "color": "#5b8fe0"
+      "color": "#5b8fe0",
+      "class": "warrior"
     },
     "healer": {
       "label": "Healer",
-      "weapon": "short_sword",
+      "weapon": "oak_staff",
       "spells": [
         "heal",
         "frost_bolt"
       ],
       "hp_mult": 1.0,
       "follow_offset": -44,
-      "color": "#7fe39b"
+      "color": "#7fe39b",
+      "class": "mage"
     },
     "ranged": {
       "label": "Ranged",
       "weapon": "throwing_kunai",
       "spells": [
-        "fireball",
+        "lucky_seven",
         "venom_glob"
       ],
       "hp_mult": 0.9,
       "follow_offset": -20,
-      "color": "#ffb347"
+      "color": "#ffb347",
+      "class": "rogue"
     }
   },
   "sims": [
@@ -528,5 +671,134 @@
     "_doc": "Entering a map under its minimum level: 'hard' when below it, 'deadly' when deadly_gap or more levels below. Travel is never blocked.",
     "deadly_gap": 5,
     "banner_time": 6.0
-  }
+  },
+  "stat_effects": {
+    "_doc": "Per point of each stat. Damage comes from an attack's own stat (weapon or skill 'stat'), see player.damage_per_point.",
+    "str": {
+      "hp": 1
+    },
+    "dex": {
+      "crit": 0.0003
+    },
+    "int": {
+      "mp": 1
+    },
+    "luk": {
+      "crit": 0.001,
+      "drop": 0.01
+    }
+  },
+  "classes": {
+    "warrior": {
+      "name": "Warrior",
+      "desc": "Tough front-liner. Big swings and a ground slam.",
+      "primary": "str",
+      "secondary": "dex",
+      "weapons": [
+        "short_sword",
+        "iron_hammer"
+      ],
+      "spells": [
+        "power_strike",
+        "ground_slam",
+        "war_cry",
+        "charge"
+      ],
+      "stats": {
+        "str": 12,
+        "dex": 5,
+        "int": 4,
+        "luk": 4
+      },
+      "auto_ap": {
+        "str": 4,
+        "dex": 1
+      },
+      "hp_mult": 1.15,
+      "mp_mult": 0.6,
+      "look": {
+        "skin": "#f2c27b",
+        "hair": "#4a3426",
+        "hair_style": "short",
+        "shirt": "#c0392b",
+        "pants": "#3b4a6b",
+        "hat": ""
+      },
+      "color": "#ff7a5a"
+    },
+    "mage": {
+      "name": "Mage",
+      "desc": "Fire, frost, poison and lightning. Sets up combos.",
+      "primary": "int",
+      "secondary": "luk",
+      "weapons": [
+        "oak_staff"
+      ],
+      "spells": [
+        "fireball",
+        "frost_bolt",
+        "venom_glob",
+        "chain_lightning"
+      ],
+      "stats": {
+        "str": 4,
+        "dex": 4,
+        "int": 12,
+        "luk": 5
+      },
+      "auto_ap": {
+        "int": 4,
+        "luk": 1
+      },
+      "hp_mult": 0.85,
+      "mp_mult": 1.4,
+      "look": {
+        "skin": "#f2c27b",
+        "hair": "#3a2a5a",
+        "hair_style": "long",
+        "shirt": "#5b4bb7",
+        "pants": "#2c2a4a",
+        "hat": ""
+      },
+      "color": "#9b8cff"
+    },
+    "rogue": {
+      "name": "Rogue",
+      "desc": "Quick and lucky. Daggers up close, kunai from afar.",
+      "primary": "dex",
+      "secondary": "luk",
+      "weapons": [
+        "dagger",
+        "throwing_kunai"
+      ],
+      "spells": [
+        "lucky_seven",
+        "venom_glob",
+        "flurry",
+        "haste"
+      ],
+      "stats": {
+        "str": 4,
+        "dex": 12,
+        "int": 4,
+        "luk": 5
+      },
+      "auto_ap": {
+        "dex": 4,
+        "luk": 1
+      },
+      "hp_mult": 1.0,
+      "mp_mult": 0.9,
+      "look": {
+        "skin": "#e0a878",
+        "hair": "#1c1c1c",
+        "hair_style": "spiky",
+        "shirt": "#2f4f3f",
+        "pants": "#2a2a30",
+        "hat": "band"
+      },
+      "color": "#7fe39b"
+    }
+  },
+  "start_class": "warrior"
 }

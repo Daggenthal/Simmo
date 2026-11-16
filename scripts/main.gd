@@ -1,6 +1,8 @@
 extends Node2D
-## Entry point: loads balance data, builds the world, player, party, camera, HUD.
-## Tests can set spawn_sims = false (before adding the scene) for a solo run.
+## Entry point: loads balance data, shows the class select screen, then builds the world,
+## player, party, camera and HUD for the chosen class.
+## Tests and tools set (before adding the scene): show_start_screen = false to skip straight in,
+## start_class to pick the class, spawn_sims = false for a solo run.
 
 const BALANCE_PATH := "res://data/balance.json"
 
@@ -18,6 +20,12 @@ var _sky: ColorRect
 var _hills: Array = []
 var items: Dictionary = {}
 var inventory_ui: InventoryUI
+var stats_ui: StatsUI
+var show_start_screen := true
+## Class used when the start screen is skipped ("" = balance.json start_class).
+var start_class := ""
+var start_screen: StartScreen
+var _start_layer: CanvasLayer
 
 func _ready() -> void:
 	Log.info("Simmo starting (Godot %s)" % Engine.get_version_info().string)
@@ -26,6 +34,25 @@ func _ready() -> void:
 		Log.crash("Could not load %s, cannot start" % BALANCE_PATH)
 		return
 	Combat.setup(balance)
+	if show_start_screen:
+		_start_layer = CanvasLayer.new()
+		_start_layer.layer = 20
+		add_child(_start_layer)
+		start_screen = StartScreen.new()
+		start_screen.balance = balance
+		start_screen.class_chosen.connect(_on_class_chosen)
+		_start_layer.add_child(start_screen)
+		return
+	start_game(start_class if start_class != "" else String(balance.get("start_class", "warrior")))
+
+func _on_class_chosen(id: String) -> void:
+	_start_layer.queue_free()
+	start_screen = null
+	start_game(id)
+
+## Build the game for class `id`.
+func start_game(id: String) -> void:
+	Log.ok("Starting as %s" % balance.classes.get(id, {}).get("name", id))
 	_build_sky()
 	world = World.new()
 	world.name = "World"
@@ -36,6 +63,7 @@ func _ready() -> void:
 	player = Player.new()
 	player.name = "Player"
 	player.setup(balance.player, world.spawn_point, balance.weapons, balance.get("spells", {}))
+	player.set_class(balance, id)
 	player.world = world
 	world.add_child(player)
 	world.party = [player]
@@ -64,6 +92,10 @@ func _ready() -> void:
 	inventory_ui = InventoryUI.new()
 	inventory_ui.player = player
 	layer.add_child(inventory_ui)
+	stats_ui = StatsUI.new()
+	stats_ui.player = player
+	stats_ui.inventory_ui = inventory_ui
+	layer.add_child(stats_ui)
 	# Portal labels are colored by danger for the player's level; redraw when it changes.
 	player.stats_changed.connect(world.queue_redraw)
 
@@ -156,6 +188,8 @@ func _build_sky() -> void:
 		add_child(p)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if player == null:
+		return
 	if event.is_action_pressed("debug_toggle"):
 		Log.debug = not Log.debug
 		Log.info("Debug mode %s" % ("on" if Log.debug else "off"))
@@ -163,17 +197,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		hud.show_help = not hud.show_help
 	elif event.is_action_pressed("auto_battle"):
 		player.set_auto_battle(not player.auto_battle)
-	elif event.is_action_pressed("weapon_1"):
-		player.equip("dagger")
-	elif event.is_action_pressed("weapon_2"):
-		player.equip("short_sword")
-	elif event.is_action_pressed("weapon_3"):
-		player.equip("iron_hammer")
-	elif event.is_action_pressed("weapon_4"):
-		player.equip("throwing_kunai")
+	elif event.is_action_pressed("weapon_1") or event.is_action_pressed("weapon_2") \
+			or event.is_action_pressed("weapon_3") or event.is_action_pressed("weapon_4"):
+		# Number keys pick from your class's weapons, in order.
+		for n in 4:
+			if event.is_action_pressed("weapon_%d" % (n + 1)) and n < player.allowed_weapons.size():
+				player.use_and_report(player.equip(String(player.allowed_weapons[n])))
 	elif event.is_action_pressed("weapon_next"):
-		var keys: Array = balance.weapons.keys()
-		player.equip(keys[(keys.find(player.weapon_key) + 1) % keys.size()])
+		var keys: Array = player.allowed_weapons
+		player.equip(String(keys[(keys.find(player.weapon_key) + 1) % keys.size()]))
+	elif event.is_action_pressed("stats_toggle"):
+		stats_ui.visible = not stats_ui.visible
 	elif event.is_action_pressed("move_up"):
 		var portal := world.portal_at(player.global_position)
 		if not portal.is_empty() and player.is_on_floor():
@@ -198,7 +232,7 @@ func _process(_delta: float) -> void:
 		_debug_draw.queue_redraw()
 
 func _on_debug_draw() -> void:
-	if not Log.debug:
+	if not Log.debug or player == null:
 		return
 	for m in world.mobs:
 		if m.alive:

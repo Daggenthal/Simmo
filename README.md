@@ -21,8 +21,9 @@ Needs Godot 4.7 or newer: `brew install --cask godot`
 | Jump | Alt or Space | A / Cross |
 | Attack | Ctrl or J | X / Square |
 | Drop through platform | Down + Jump | Down + A |
-| Switch weapon | 1 / 2 / 3 / 4, or E to cycle | RB / R1 |
-| Fireball / Frost Bolt / Venom Glob / Chain Lightning | Z / X / C / V | B / LB / L3 / R3 |
+| Switch weapon (your class's) | 1 / 2, or E to cycle | RB / R1 |
+| Class skills 1 to 4 | Z / X / C / V | B / LB / L3 / R3 |
+| Stats window (spend AP, auto-assign) | K | |
 | Auto-battle on/off | Q or Tab (or the AUTO button) | Y / Triangle |
 | Show / hide controls | F1 | Start / Options |
 | Debug overlay | F3 | Back / Share |
@@ -31,6 +32,20 @@ Needs Godot 4.7 or newer: `brew install --cask godot`
 | Inventory (click an item to use it) | I | |
 | HP potion / MP potion | R / F | |
 | Respawn all mobs | F5 | |
+
+## Classes
+
+The game opens on a class select screen. Each class only uses its own weapons and has four skills (the screen lists them all):
+
+| Class | Main stat | Weapons | Skills |
+| --- | --- | --- | --- |
+| Warrior | STR | Short Sword (start), Iron Hammer | Power Strike, Ground Slam, War Cry (+25% damage), Charge (dash through mobs) |
+| Mage | INT | Oak Staff (+20% spell damage) | Fireball, Frost Bolt, Venom Glob, Chain Lightning |
+| Rogue | DEX | Dagger (start, stabs), Throwing Kunai | Lucky Seven (2 kunai), Venom Glob, Flurry (3 stabs), Haste (+30% attack speed) |
+
+Stats: STR, DEX, INT, LUK. Every attack scales with its own stat; STR also adds HP, INT adds MP, DEX and LUK add crit, LUK raises item drops. Each level gives 5 AP; auto-assign (on by default) spends them 4 into the main stat and 1 into the secondary. Turn it off in the stats window (K) to spend them yourself.
+
+Auto-battle moves on by itself: once you reach the next map's level it walks to the portal and goes through (`auto_advance_zones` in `data/balance.json`).
 
 ## What's in M0
 
@@ -113,6 +128,7 @@ Needs Godot 4.7 or newer: `brew install --cask godot`
 | `tests/world_test.gd` | Headless test for map data, portals, mob scaling, XP rules and resists |
 | `tests/party_test.gd` | Headless test for SimPlayers: following, roles, healing, perching, XP share, knockouts, portals |
 | `tests/items_test.gd` | Headless test for the inventory, potions, XP tonics, loot, auto-potions, hotkeys and the window |
+| `tests/class_test.gd` | Headless test for the class select screen, weapon locks, stats and AP, every class skill and auto-advance |
 | `scripts/combat.gd` | Damage, element and combo rules shared by every attack |
 | `tools/screenshot.gd` | Renders screenshots at any resolution for layout checks |
 

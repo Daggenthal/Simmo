@@ -24,6 +24,7 @@ const BINDINGS := {
 	"respawn_mobs": [KEY_F5],
 	"party_toggle": [KEY_P],
 	"inventory_toggle": [KEY_I],
+	"stats_toggle": [KEY_K],
 	"potion_hp": [KEY_R],
 	"potion_mp": [KEY_F],
 }

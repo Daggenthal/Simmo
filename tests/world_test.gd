@@ -19,6 +19,8 @@ func _initialize() -> void:
 	Scal = load("res://scripts/scaling.gd")
 	_main = load("res://main.tscn").instantiate()
 	_main.spawn_sims = false
+	_main.show_start_screen = false
+	_main.start_class = "warrior"
 	root.add_child(_main)
 
 func _check(cond: bool, msg: String) -> void:
@@ -78,7 +80,7 @@ func _physics_process(_d: float) -> bool:
 				for m in world.mobs:
 					lowest = mini(lowest, m.level)
 				_check(lowest >= 6, "Mushroom Grove mobs are stronger (lowest level %d)" % lowest)
-				_check(_main.hud.warning_danger == "deadly" and "Lv 6-12" in _main.hud.warning_text and _main.hud._warning_t > 0.0,
+				_check(_main.hud.warning_text == "Warning! Mobs here are 5 levels above you" and _main.hud._warning_t > 0.0,
 					"level 1 entering Mushroom Grove gets a danger warning (%s: %s)" % [_main.hud.warning_danger, _main.hud.warning_text])
 				var types := {}
 				for m in world.mobs:
@@ -193,7 +195,9 @@ func _check_scaling() -> void:
 	var sword: Dictionary = bal.weapons.short_sword
 	var hits := []
 	for lvl in [1, 10, 20, 30]:
-		var per_hit: float = (float(sword.damage_min) + float(sword.damage_max)) / 2.0 + (lvl - 1) * float(pl.damage_per_level) * float(sword.cooldown) / float(pl.level_bonus_reference_cooldown)
+		# A warrior auto-assigns 4 STR a level.
+		var str_pts: float = 4.0 * (lvl - 1)
+		var per_hit: float = (float(sword.damage_min) + float(sword.damage_max)) / 2.0 + str_pts * float(pl.damage_per_point) * float(sword.cooldown) / float(pl.level_bonus_reference_cooldown)
 		var m = Scal.mob_stats(bal.mobs.green_slime, lvl, sc)
 		hits.append(float(m.hp) / per_hit)
 	_check(hits.max() / hits.min() <= 1.3, "same-level mobs take about as many hits at every level (%s)" % ", ".join(hits.map(func(h): return "%.2f" % h)))
@@ -219,6 +223,8 @@ func _check_danger(world) -> void:
 	_check(world.danger("mushroom_grove", 1) == "deadly", "Lv 1 -> Mushroom Grove (Lv 6-12) is deadly")
 	_check(world.danger("mushroom_grove", 4) == "hard", "Lv 4 -> Mushroom Grove is hard")
 	_check(world.danger("mushroom_grove", 6) == "" and world.danger("mushroom_grove", 20) == "", "Lv 6 and Lv 20 -> Mushroom Grove is fine")
+	_check(_main.hud.warning_for(1) == "Warning! Mobs here are 1 level above you", "one level: singular (%s)" % _main.hud.warning_for(1))
+	_check(_main.hud.warning_for(3) == "Warning! Mobs here are 3 levels above you", "more than one: plural (%s)" % _main.hud.warning_for(3))
 
 func _check_xp_rules(world, p) -> void:
 	var sc: Dictionary = _main.balance.mob_scaling

@@ -2,14 +2,14 @@
 
 Simmo is an offline "fake MMO" in Godot 4.7: MapleStory-style side view, simulated players (SimPlayers) who party, guild and trade with you, and idle progress while you're away. Repo: github.com/Daggenthal/Simmo. The full design lives in the design doc "Simulated MMO Idle Game: Design Doc" (ask the owner for the link if you need it).
 
-Current state: milestone M1 (placeholder art drawn in code). Movement, melee weapons, thrown kunai, four spells with status effects and combos, auto-battle with nav-graph pathing. Four maps joined by portals (`data/maps.json`), mob stats and XP scale by level, XP drops off on low mobs. A party of 3 SimPlayers (tank, healer, ranged) shares the auto-battle brain, follows the player across platforms and through portals, and splits kill XP. Portals warn about under-leveled maps without blocking. Inventory with potions and XP tonics, loot from party kills, auto-potions during auto-battle.
+Current state: milestone M1 (placeholder art drawn in code). Movement, melee weapons, thrown kunai, four spells with status effects and combos, auto-battle with nav-graph pathing. Four maps joined by portals (`data/maps.json`), mob stats and XP scale by level, XP drops off on low mobs. A party of 3 SimPlayers (tank, healer, ranged) shares the auto-battle brain, follows the player across platforms and through portals, and splits kill XP. Portals warn about under-leveled maps without blocking. Inventory with potions and XP tonics, loot from party kills, auto-potions during auto-battle. Class select screen (Warrior / Mage / Rogue) with class-locked weapons, four skills each, STR / DEX / INT / LUK with AP and auto-assign. Auto-battle walks to the next map once you reach its level.
 
 ## How to work on this repo
 
 **The loop:** Reproduce, write a failing test, fix, run the full suite several times, look at a screenshot when anything visual changed. Every bug fixed so far got a regression test first; keep doing that. When a test passes without your fix, the test is not reproducing the bug yet (this happened twice; see Gotchas).
 
 ```
-./run.sh test     # all five headless suites, ~10 s total, exit 0 = pass
+./run.sh test     # all six headless suites, ~15 s total, exit 0 = pass
 SIMMO_SEED=3 ./run.sh test   # same with another seed; loop a few seeds to catch flaky checks
 ./run.sh          # play
 ./run.sh debug    # hitboxes, debug overlay, full logging
@@ -20,7 +20,7 @@ Run the suite at least 5 times after AI or physics changes, with different `SIMM
 
 Screenshots for layout checks (needs a display; on macOS just run it, on Linux use `xvfb-run -a`):
 ```
-godot --path . --rendering-driver opengl3 --script res://tools/screenshot.gd -- 1280x720   # also 2560x1080, weapon=iron_hammer, map=ember_crags, level=15
+godot --path . --rendering-driver opengl3 --script res://tools/screenshot.gd -- 1280x720   # also 2560x1080, weapon=dagger, class=mage, map=ember_crags, level=15, start (class select screen)
 godot --path . --rendering-driver opengl3 --script res://tools/screenshot_magic.gd          # staged status effects
 ```
 Soak run (real game, party + auto-battle, 60 s per map; look for SCRIPT ERROR and the per-map kill/level lines):
@@ -48,11 +48,13 @@ Output goes to `screenshots/` (gitignored). Software rendering is slow: if mobs 
 | Path | What |
 | --- | --- |
 | `main.tscn`, `scripts/main.gd` | Entry: loads balance, builds world, player, party, camera, sky; follows map changes; global hotkeys (Up = portal, P = party) |
-| `scripts/actor.gd` | `Actor`: the body shared by player and sims. Movement from an intent dict, weapons, spells (incl. heal), HP/MP/XP, paper-doll drawing from `look` |
+| `scripts/actor.gd` | `Actor`: the body shared by player and sims. Movement from an intent dict, class (`set_class`), stats and AP (`auto_spend`, `add_stat`, `set_level`), weapons (class-locked `equip`), skills (bolt, lob, chain, heal, strike, slam, volley, dash, buff), buffs, HP/MP/XP, static paper-doll drawing (`draw_doll`, `draw_weapon_shape`) |
 | `scripts/player.gd` | `Player extends Actor`: keyboard/controller input, auto-battle toggle and manual override, inventory use (`use_item`, `use_best`), auto-potions |
 | `scripts/inventory.gd`, `scripts/inventory_ui.gd` | `Inventory` (slots, stacking, item defs) and `InventoryUI` (I window, click to use, item icons) |
 | `data/items.json` | Items, loot table, starter kit, inventory size, use cooldown |
-| `scripts/sim_player.gd` | `SimPlayer extends Actor`: role setup from `sim_roles`, knockout and revive next to the leader |
+| `scripts/sim_player.gd` | `SimPlayer extends Actor`: role setup from `sim_roles` (class, weapon, skills), knockout and revive next to the leader |
+| `scripts/start_screen.gd` | `StartScreen`: class select with cards, weapons and skills; emits `class_chosen` |
+| `scripts/stats_ui.gd` | `StatsUI`: K window, + buttons for AP, auto-assign toggle |
 | `scripts/brain.gd` | `Brain`: auto-battle (`think`, `_pick_target`, `pick_spell`), nav routing, follow-the-leader, roles (tank front, healer heals, ranged perches) |
 | `scripts/scaling.gd` | `Scaling`: mob stats by level, XP by level difference, party XP share, level label colors |
 | `scripts/mob.gd` | Mobs: wander/aggro (aggro_range), knockback clamped to their platform (knockback_mult), resists, status effects, shapes and level label |
@@ -69,6 +71,7 @@ Output goes to `screenshots/` (gitignored). Software rendering is slow: if mobs 
 | `tests/world_test.gd` | Every map's data (reachable, connected, valid spawns, two-way portals), portal travel, scaling, XP rules, resists |
 | `tests/party_test.gd` | Sims: spawn, follow onto platforms, role positions, heal, ranged perch, XP share, loot, fighting, knockout, portal |
 | `tests/items_test.gd` | Inventory stacking, potions, best-potion pick, XP tonics and expiry, loot and min_level, auto-potions, R hotkey, I window clicks |
+| `tests/class_test.gd` | Class select (keys and clicks), weapon locks, AP and auto-assign, stats window, staff spell power, every warrior and rogue skill, auto-advance to the next map |
 
 ## Gotchas learned the hard way
 
@@ -82,6 +85,8 @@ Output goes to `screenshots/` (gitignored). Software rendering is slow: if mobs 
 - **Keep the screen center clear:** The camera centers the player, so HUD pieces go to the edges.
 - **Mob test dummies:** Set `data.speed`, `data.hop_velocity` and `data.touch_damage` to 0 on a duplicated `data` dict, then `set_bounds(world.nav)` and `respawn()`. If sims are around, also set `data.knockback_mult = 0` or the tank's hammer pushes the dummy out of the test.
 - **Solo tests:** Set `_main.spawn_sims = false` before `root.add_child(_main)`, or the sims steal kills and XP.
+- **The start screen:** Tests and tools must set `_main.show_start_screen = false` and `_main.start_class` before `add_child`, or `player` and `world` stay null. Use `player.switch_to_weapon_class(id)` to test a weapon outside the current class.
+- **Stats come from AP:** Setting `player.level` directly leaves stats (and damage) at the old level. Use `player.set_level(n)`, which re-spends AP and refills HP/MP.
 - **Map changes are deferred:** `world.travel()` runs at the end of the frame (freeing physics bodies mid-physics is unsafe). Wait a few frames before checking. Map pieces live under `World/Map`; anything else under World that isn't in the `persist` group (actors, debug draw) is freed on travel.
 - **Mob levels are rolled** (`level_spread`), so a test that needs an exact level should set `mob.data = world.mob_data(id, level)` and `mob.level` itself.
 - **Fixed seeds hide flakes:** A check that passes on the default seed can fail on others (happened twice in M1: a mob parked next to a mid-jump player, and combo dummies that were only "tough" for a level 1 player). Loop `SIMMO_SEED`.
@@ -90,7 +95,9 @@ Output goes to `screenshots/` (gitignored). Software rendering is slow: if mobs 
 
 - Auto-battle: manual input takes over movement but auto keeps swinging at anything in front; resumes 0.4 s after input stops with a fresh target; sticks to wounded targets; finishes wounded mobs first; gives up on unreachable ones after 5 s; routes with the nav graph; weaves weapon attacks between spells; combo finishers (lightning on frozen, fire on 3+ poison) beat a weapon swing; with a thrown weapon it closes to 60% of max range.
 - Spells: 1 s global cooldown, per-spell cooldowns (4 / 5 / 3 / 9 s), a cast locks the weapon 0.4 s, attacking locks casting 0.3 s.
-- Weapon DPS stays within about 30% across weapons at levels 1, 10 and 30 (tested).
+- Weapon DPS stays within about 30% across weapons at levels 1, 10 and 30, each in the hands of its own class with auto-assigned stats (tested). Staffs are excluded: they hit softly and boost INT spells by `spell_power`.
+- Classes: only a class's own weapons can be equipped. Damage bonus = points of the attack's stat above the class start x `damage_per_point` (1.25) x cooldown / 0.8; auto-assign (4 main + 1 secondary per level) reproduces the old 5-per-level curve, so mob scaling still lines up.
+- Auto-advance: with auto-battle on and `auto_advance_zones` true, reaching the next map's minimum level walks to its portal. Only forward, never back.
 - Knockback never pushes mobs off their platform.
 - Every platform must be reachable by a real jump, on every map (tested).
 - Mobs keep their map's level; they don't scale to the player. Stats follow the player's curves, so same-level fights feel the same at every level (tested). XP: full within 3 levels under, then -15% per level down to 10%; +5% per level above, up to +30%.

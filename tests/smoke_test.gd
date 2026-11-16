@@ -35,6 +35,8 @@ func _initialize() -> void:
 	seed(int(env_seed) if env_seed != "" else 1337)
 	_main = load("res://main.tscn").instantiate()
 	_main.spawn_sims = false  # solo: these checks count the player's own kills
+	_main.show_start_screen = false
+	_main.start_class = "warrior"
 	root.add_child(_main)
 
 func _check(cond: bool, msg: String) -> void:
@@ -147,7 +149,8 @@ func _physics_process(_delta: float) -> bool:
 			# After letting go, auto must pick a target from the new spot within half a second.
 			if _phase_frame == 30:
 				var t = player.brain.target
-				_check(t != null and t.alive and (absf(player.velocity.x) > 1.0 or player._swing_time > 0.0),
+				# Moving, swinging, or still in the air from a knockback (the brain acts once it lands).
+				_check(t != null and t.alive and (absf(player.velocity.x) > 1.0 or player._swing_time > 0.0 or not player.is_on_floor()),
 					"auto-battle resumes within 0.5s of letting go (target %s, vx %.0f)" % [str(t.id) if t else "none", player.velocity.x])
 				# Steering by hand with a mob right in front: auto keeps swinging.
 				var m = null
@@ -254,7 +257,7 @@ func _test_weapons(player, world) -> void:
 			m.alive = false
 			m.visible = false
 			m.set_physics_process(false)
-		player.equip(wid)
+		player.switch_to_weapon_class(wid)
 		player.set_auto_battle(false)
 		_swings_start = player.swings
 		Input.action_press("attack")
@@ -273,16 +276,21 @@ func _weapon_balance(player, world) -> void:
 	var heavy: Dictionary = w.iron_hammer
 	_check(float(heavy.cooldown) > float(light.cooldown) * 2.0, "hammer swings much slower than dagger (%.2fs vs %.2fs)" % [heavy.cooldown, light.cooldown])
 	_check((heavy.damage_min + heavy.damage_max) > 2.5 * (light.damage_min + light.damage_max), "hammer hits much harder per swing than dagger")
+	# Each weapon in the hands of its own class, auto-assigned stats. Staffs are left out:
+	# they hit softly on purpose and boost spells instead.
 	for lvl in [1, 10, 30]:
-		player.level = lvl
 		var dps := []
 		for k in w:
+			if w[k].has("spell_power"):
+				continue
+			player.switch_to_weapon_class(k)
+			player.set_level(lvl)
 			dps.append(player.weapon_dps(w[k]))
 		var spread: float = dps.max() / dps.min()
 		_check(spread <= 1.3, "weapon DPS stays balanced at level %d (spread x%.2f: %s)" % [lvl, spread, ", ".join(dps.map(func(d): return "%.1f" % d))])
-	player.level = 1
+	player.set_level(1)
 	# Wind-up: the hammer's hit lands later than the swing starts.
-	player.equip("iron_hammer")
+	player.switch_to_weapon_class("iron_hammer")
 	player.attack()
 	_check(player._pending_hit > 0.0, "hammer has a wind-up before the hit lands (%.2fs)" % player._pending_hit)
 	player._pending_hit = -1.0
@@ -292,7 +300,7 @@ func _weapon_balance(player, world) -> void:
 		if lineup.size() < 4:
 			lineup.append(m)
 	for k in ["dagger", "iron_hammer"]:
-		player.equip(k)
+		player.switch_to_weapon_class(k)
 		player.facing = 1
 		for j in lineup.size():
 			var m = lineup[j]
@@ -359,7 +367,7 @@ var _fresh = null
 func _test_focus(player, world) -> void:
 	if _phase_frame == 1:
 		player.set_auto_battle(false)
-		player.equip("iron_hammer")
+		player.switch_to_weapon_class("iron_hammer")
 		for m in world.mobs:
 			m.alive = false
 			m.visible = false
@@ -394,5 +402,5 @@ func _test_focus(player, world) -> void:
 	if _phase_frame > 30 and (not _wounded.alive or not _fresh.alive or _phase_frame == 900):
 		_check(not _wounded.alive and _fresh.alive, "auto-battle finishes the wounded mob before switching to a fresh one (wounded %s, fresh %s)" % ["dead" if not _wounded.alive else "alive", "dead" if not _fresh.alive else "alive"])
 		player.set_auto_battle(false)
-		player.equip("short_sword")
+		player.switch_to_weapon_class("short_sword")
 		_goto("done")

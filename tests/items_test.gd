@@ -19,6 +19,8 @@ func _initialize() -> void:
 	InvS = load("res://scripts/inventory.gd")
 	_main = load("res://main.tscn").instantiate()
 	_main.spawn_sims = false
+	_main.show_start_screen = false
+	_main.start_class = "warrior"
 	root.add_child(_main)
 
 func _check(cond: bool, msg: String) -> void:
@@ -148,7 +150,7 @@ func _check_potions(p) -> void:
 	p.hp = p.max_hp
 	_check(p.use_item("red_potion") == "HP is full" and p.inventory.count("red_potion") == n0 - 1, "can't waste a potion at full HP")
 	p.mp = 0.0
-	_check(p.use_item("blue_potion") == "" and is_equal_approx(p.mp, 40.0), "Blue Potion restores 40 MP")
+	_check(p.use_item("blue_potion") == "" and is_equal_approx(p.mp, minf(40.0, p.max_mp)), "Blue Potion restores 40 MP, up to max (%.0f of %d)" % [p.mp, p.max_mp])
 	# Best potion: the smallest that covers what's missing, else the biggest.
 	p.inventory.add("white_potion", 2)
 	p.max_hp = 400

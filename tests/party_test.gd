@@ -25,6 +25,8 @@ func _initialize() -> void:
 	var env_seed := OS.get_environment("SIMMO_SEED")
 	seed(int(env_seed) if env_seed != "" else 9001)
 	_main = load("res://main.tscn").instantiate()
+	_main.show_start_screen = false
+	_main.start_class = "warrior"
 	root.add_child(_main)
 
 func _check(cond: bool, msg: String) -> void:
@@ -96,6 +98,8 @@ func _physics_process(_d: float) -> bool:
 				_check(_tank.max_hp > p.max_hp and _tank.weapon_key == "iron_hammer", "tank has more HP (%d vs %d) and a hammer" % [_tank.max_hp, p.max_hp])
 				_check(_healer.spells.has("heal") and not p.spells.has("heal"), "healer knows Heal; the player's skill bar doesn't get it")
 				_check(_ranged.weapon.get("thrown", false), "ranged sim throws kunai")
+				_check(_tank.class_id == "warrior" and _healer.class_id == "mage" and _healer.weapon_key == "oak_staff" and _ranged.class_id == "rogue",
+					"sims have classes: Warrior tank, Mage healer with a staff, Rogue ranged")
 				var looks := {}
 				for s in sims:
 					looks[str(s.look)] = true
