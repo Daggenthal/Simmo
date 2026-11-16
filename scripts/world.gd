@@ -98,7 +98,8 @@ func _process(delta: float) -> void:
 	for entry in _respawn_queue.duplicate():
 		entry.t -= delta
 		if entry.t <= 0.0:
-			entry.mob.respawn()
+			if not entry.mob.alive:
+				entry.mob.respawn()
 			_respawn_queue.erase(entry)
 
 ## The one-way platform whose top is at surface_y and spans x, or {} for the ground.

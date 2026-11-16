@@ -199,6 +199,8 @@ func _physics_process(_delta: float) -> bool:
 			_test_weapons(player, world)
 		"nav":
 			_test_nav(player, world)
+		"focus":
+			_test_focus(player, world)
 		"done":
 			if _failures == 0:
 				_log.ok("ALL CHECKS PASSED (%d frames)" % _frame)
@@ -296,6 +298,8 @@ func _weapon_balance(player, world) -> void:
 
 ## Auto-battle must go platform to platform without touching the ground when that's the short way.
 func _test_nav(player, world) -> void:
+	if _phase_frame == 1:
+		world._respawn_queue.clear()
 	if _phase_frame == 1 and _nav_idx == 0:
 		var nav = world.nav
 		var missing := []
@@ -305,7 +309,7 @@ func _test_nav(player, world) -> void:
 					missing.append("%d->%d" % [a.id, b.id])
 		_check(missing.is_empty(), "nav graph connects every surface (%d surfaces, %d links; missing %s)" % [nav.surfaces.size(), nav.links.size(), str(missing)])
 	if _nav_idx >= NAV_CASES.size():
-		_goto("done")
+		_goto("focus")
 		return
 	var c: Array = NAV_CASES[_nav_idx]
 	if _phase_frame == 1:
@@ -339,3 +343,48 @@ func _test_nav(player, world) -> void:
 		player.set_auto_battle(false)
 		_nav_idx += 1
 		_phase_frame = 0
+
+## The reported case: hammer knocks a ground mob back, a fresh mob sits on the platform
+## right above. Auto-battle must finish the wounded one first.
+var _wounded = null
+var _fresh = null
+func _test_focus(player, world) -> void:
+	if _phase_frame == 1:
+		player.set_auto_battle(false)
+		player.equip("iron_hammer")
+		for m in world.mobs:
+			m.alive = false
+			m.visible = false
+			m.set_physics_process(false)
+		world._respawn_queue.clear()
+		_wounded = world.mobs[0]
+		_fresh = world.mobs[1]
+		for pair in [[_wounded, Vector2(430, 329)], [_fresh, Vector2(380, 269)]]:
+			var m = pair[0]
+			m.home = pair[1]
+			m.data = m.data.duplicate()
+			m.data.hp = 60
+			m.data.speed = 0.0
+			m.data.hop_velocity = 0.0
+			m.max_hp = 60
+			m.set_bounds(world.nav)
+			m.respawn()
+		player.position = Vector2(420, 330)
+		player.velocity = Vector2.ZERO
+		player.facing = 1
+	if _phase_frame == 3:
+		# One hammer hit on the ground mob: wounds it and sends it flying 120 px away,
+		# further than the fresh mob on the platform overhead.
+		_wounded.take_hit(25, false, 1, player, 210.0)
+		_wounded.global_position = Vector2(540, 329)
+		_wounded.velocity = Vector2.ZERO
+	if _phase_frame == 30:
+		player.set_auto_battle(true)
+	if OS.get_environment("NAV_TRACE") == "1" and (_phase_frame % 10 == 0 or _phase_frame < 6) and _phase_frame < 200:
+		var t = player._auto_target
+		print("focus f=%d player=(%.0f,%.0f) wounded=(%.0f,%.0f) fresh=(%.0f,%.0f) target=%s" % [_phase_frame, player.position.x, player.position.y, _wounded.position.x, _wounded.position.y, _fresh.position.x, _fresh.position.y, "wounded" if t == _wounded else ("fresh" if t == _fresh else "none")])
+	if _phase_frame > 30 and (not _wounded.alive or not _fresh.alive or _phase_frame == 900):
+		_check(not _wounded.alive and _fresh.alive, "auto-battle finishes the wounded mob before switching to a fresh one (wounded %s, fresh %s)" % ["dead" if not _wounded.alive else "alive", "dead" if not _fresh.alive else "alive"])
+		player.set_auto_battle(false)
+		player.equip("short_sword")
+		_goto("done")

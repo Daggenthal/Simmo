@@ -178,8 +178,10 @@ func _auto_think(delta: float) -> Dictionary:
 		_ignored[_auto_target] = 4.0
 		_auto_target = null
 	var lost: bool = _auto_target == null or not is_instance_valid(_auto_target) or not _auto_target.alive
+	# Once a target is wounded we stay on it until it dies (or we give up on it).
+	var engaged: bool = not lost and _auto_target.hp < _auto_target.max_hp
 	# Only re-plan while standing on something, so routes start from a known surface.
-	if lost or (_auto_retarget <= 0.0 and is_on_floor()):
+	if lost or (_auto_retarget <= 0.0 and is_on_floor() and not engaged):
 		_auto_retarget = float(cfg.auto_retarget)
 		var picked := _pick_target()
 		if picked != _auto_target:
@@ -250,6 +252,13 @@ func _pick_target() -> Mob:
 			cost = world.nav.find_route(my_s, global_position.x, t_s, m.global_position.x).cost
 		else:
 			cost = absf(m.global_position.x - global_position.x) + absf(_mob_surface_y(m) - global_position.y) * 3.0
+		if cost == INF:
+			continue
+		# Finish wounded mobs first (hammer cleave leaves several), and stick with the current target.
+		if m.hp < m.max_hp:
+			cost -= float(cfg.get("auto_wounded_bonus", 150.0))
+		if m == _auto_target:
+			cost -= float(cfg.get("auto_stick_bonus", 40.0))
 		if cost < best_cost:
 			best_cost = cost
 			best = m

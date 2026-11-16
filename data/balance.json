@@ -22,7 +22,9 @@
     "starting_weapon": "short_sword",
     "level_bonus_reference_cooldown": 0.8,
     "attack_speed_scale": 1.0,
-    "auto_give_up_time": 5.0
+    "auto_give_up_time": 5.0,
+    "auto_wounded_bonus": 150.0,
+    "auto_stick_bonus": 40.0
   },
   "mobs": {
     "green_slime": {
