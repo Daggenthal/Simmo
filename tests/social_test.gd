@@ -75,6 +75,7 @@ func _physics_process(_d: float) -> bool:
 				_check_logs(p, world)
 				_check_tabs()
 				_check_chat_box()
+				_check_party_menu()
 				_check_spam()
 				_main.chatter._local_t = 0.05
 				_lines0 = CL.count("local")
@@ -233,3 +234,33 @@ func _check_chat_box() -> void:
 	box._reset_view()
 	_check(box.visible_lines()[-1].text == "brand new line", "jumping back down shows the newest line")
 	box.set_layout(250, 6, false)
+
+## Right-click a party member (frame or body) for Inspect / Trade / Kick.
+func _check_party_menu() -> void:
+	var pm = _main.party_menu
+	var frames: Array = _main.hud.party_frames()
+	_check(frames.size() == 3, "three party frames to click (%d)" % frames.size())
+	# The second frame, so picking the trade partner actually matters (index 0 is the default).
+	var second = frames[1][1]
+	_check(pm.handle_click(MOUSE_BUTTON_RIGHT, frames[1][0].get_center()) and pm.menu_for == second,
+		"right-clicking a party frame opens the menu for that member (%s)" % (pm.menu_for.display_name if pm.menu_for else "none"))
+	pm.handle_click(MOUSE_BUTTON_LEFT, pm.action_rect(pm.ACTIONS.find("Trade")).get_center())
+	_check(_main.trade_ui.visible and _main.trade_ui.partner() == second and pm.menu_for == null,
+		"Trade opens the trade window with that member picked (%s)" % _main.trade_ui.partner().display_name)
+	_main.trade_ui.visible = false
+	# Right-click the Simmo itself in the world.
+	var body = _main.sims[2]
+	var at: Vector2 = body.get_global_transform_with_canvas() * Vector2(0, -16)
+	_check(pm.member_at(at) == body, "right-clicking a Simmo in the world finds it (%s)" % body.display_name)
+	pm.handle_click(MOUSE_BUTTON_RIGHT, at)
+	pm.handle_click(MOUSE_BUTTON_LEFT, pm.action_rect(pm.ACTIONS.find("Inspect")).get_center())
+	_check(pm.inspecting == body and pm.menu_for == null, "Inspect opens their window")
+	_check(body.inventory.count("hp_potion") > 0 or body.inventory.slots.any(func(x): return x != null),
+		"and there's something in their bag to see")
+	pm.handle_click(MOUSE_BUTTON_LEFT, pm.trade_button().get_center())
+	_check(_main.trade_ui.visible and _main.trade_ui.partner() == body, "the window's Trade button trades with them")
+	_main.trade_ui.visible = false
+	pm.handle_click(MOUSE_BUTTON_LEFT, pm.close_button().get_center())
+	_check(pm.inspecting == null, "X closes the window")
+	# Empty ground: nothing opens, the click goes on to the game.
+	_check(not pm.handle_click(MOUSE_BUTTON_RIGHT, Vector2(20, 200)) and pm.menu_for == null, "right-clicking empty ground does nothing")

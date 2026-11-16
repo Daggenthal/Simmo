@@ -199,14 +199,28 @@ func _draw_warning(vs: Vector2) -> void:
 	draw_rect(r, Color(World.danger_color(warning_danger), a), false, 1.0)
 	_text(Vector2(r.position.x + 8, r.position.y + 12), warning_text, Color(World.danger_color(warning_danger), a), 10)
 
+## Where each party frame sits: [[Rect2, member], ...], top right. Right-click one for its menu.
+func party_frames() -> Array:
+	var out: Array = []
+	if world == null:
+		return out
+	var vs := get_viewport_rect().size
+	var y := 8.0
+	for m in world.party:
+		if m == player or not is_instance_valid(m):
+			continue
+		out.append([Rect2(vs.x - 110.0, y, 112.0, 18.0), m])
+		y += 19.0
+	return out
+
 ## Party frames, top right: name, level, role color, HP bar. Returns the y below them.
 func _draw_party(vs: Vector2) -> float:
 	var y := 8.0
 	if world == null:
 		return y
-	for m in world.party:
-		if m == player or not is_instance_valid(m):
-			continue
+	for fr in party_frames():
+		var m: Actor = fr[1]
+		y = fr[0].position.y
 		var x := vs.x - 108.0
 		var down: bool = not m.is_alive()
 		var label := "%s Lv.%d" % [m.display_name, m.level]
@@ -222,7 +236,7 @@ func _draw_party(vs: Vector2) -> float:
 		if down:
 			_text(Vector2(x + 70, y + 8), "KO", Color("#ff6b6b"), 8)
 		y += 19.0
-	return y
+	return y if y > 8.0 else 8.0
 
 func _draw_debug(vs: Vector2, y0 := 16.0) -> void:
 	var alive := 0

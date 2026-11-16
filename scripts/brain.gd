@@ -191,9 +191,10 @@ const ATTACK_KINDS := ["bolt", "lob", "chain"]
 
 ## True when no attack spell can be cast soon (all cooling down for more than a moment, or no MP).
 func spells_all_cooling() -> bool:
+	var soon := float(a.cfg.get("mage_wait_for_spell", 2.0))
 	for id in a.spells:
 		var sp: Dictionary = a.spells[id]
-		if String(sp.kind) in ATTACK_KINDS and a.spell_cd[id] <= 0.6 and a.mp >= float(sp.mp):
+		if String(sp.kind) in ATTACK_KINDS and a.spell_cd[id] <= soon and a.mp >= float(sp.mp):
 			return false
 	return true
 
@@ -437,6 +438,12 @@ func pick_spell(t: Mob) -> String:
 		wants.append("venom_glob")
 	if not t.is_burning():
 		wants.append("fireball")
+	# Then plain damage: anything else that's ready. Chain Lightning used to wait for a frozen
+	# target (25% per Frost Bolt) and almost never went out, and against mobs that resist fire or
+	# poison the mage was left with Frost Bolt alone.
+	for id in ["chain_lightning", "fireball", "frost_bolt", "venom_glob"]:
+		if not wants.has(id):
+			wants.append(id)
 	for id in wants:
 		if not a.spells.has(id) or not a.can_cast(id):
 			continue

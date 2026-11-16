@@ -77,6 +77,7 @@ Output goes to `screenshots/` (gitignored), now at the window's full resolution.
 | `scripts/inventory.gd`, `scripts/inventory_ui.gd` | `Inventory` (stacks and one-of-a-kind items) and the I window (use / equip, icons, tooltips) |
 | `scripts/gear.gd`, `scripts/chest.gd` | Diablo-style loot generation (rarities, affixes, legendaries) and the boss chest |
 | `scripts/trade.gd`, `scripts/trade_ui.gd` | Trade rules (`sim_verdict`, all-or-nothing `execute`) and the T window |
+| `scripts/party_menu.gd` | Right-click a party frame or a Simmo: Inspect (class, stats, gear, bag), Trade, Kick |
 | `scripts/chat_log.gd`, `scripts/chat_box.gd`, `scripts/chatter.gd` | Chat store and channels, the chat box with tabs, fake chat and Simmo reactions |
 | `scripts/start_screen.gd`, `scripts/creator_screen.gd` | Class select and character creator |
 | `scripts/hud.gd`, `scripts/stats_ui.gd`, `scripts/pause_menu.gd` | HUD (bars, skills with cooldown timers, ultimate, party frames, boss bar, banners, flash), K window, Esc menu (settings saved to user://settings.cfg) |
@@ -85,7 +86,7 @@ Output goes to `screenshots/` (gitignored), now at the window's full resolution.
 | `data/*.json` | `balance` (tuning), `maps`, `items`, `loot`, `appearance`, `chat` |
 | `assets/sprites/<name>/` | PixelLab sprites: stills (`east.png`, `west.png`, `south.png`) and east-facing clips in `anims/<anim>/frame_NNN.png` (idle, walk, jump, attack_slash / _stab / _throw / _cast; west mirrors). A look with `"sprite": "<name>"` draws them instead of the code-drawn doll (creator rows "Sprite (test)" and "Sprite hair") |
 | `tests/*.gd` | smoke, magic, world, party, items, class, combat_ai, social, environment, menu, boss, sprite |
-| `tools/*.gd` | Screenshots, `soak.gd`, `boss_probe.gd` |
+| `tools/*.gd` | Screenshots, `soak.gd`, `boss_probe.gd`, `spell_probe.gd` |
 
 ## Gotchas learned the hard way
 
@@ -133,7 +134,8 @@ Output goes to `screenshots/` (gitignored), now at the window's full resolution.
 - Party XP: each member on the map gets `xp * (1 + 0.2 * (n - 1)) / n`, adjusted for their own level.
 - Sims stay within 220 px of the leader, only fight mobs within 260 px of the leader (bosses anywhere), heal under 65% HP, and revive next to the leader 5 s after a knockout. Ranged and healer assist the leader's target; ranged prefer targets already in reach and only climb to a perch that's a short hop away.
 - Priest (role healer, Simmo or player): Prayer when 2+ allies are under 70%, Heal under 55%, Renew (HoT) under 90% if it isn't on them; otherwise Smite the leader's target from where it stands. Stays ~95 px back, steps away from close mobs, never melees. Everyone in a party assists the leader's target, and every non-healer swings at a mob in front whenever its weapon is ready.
-- Mages (INT classes) keep ~110 px from their target and back off under 70 px; they melee only when every attack spell is on cooldown or out of MP.
+- Mages (INT classes) keep ~110 px from their target and back off under 70 px; they melee only when no attack spell comes back within `mage_wait_for_spell` (2 s) or they're out of MP.
+- Mage spell picks: combo setups first (lightning on frozen, fire on 3+ poison, frost on unchilled, venom under 3 stacks, fire on unburned), then any other ready spell as plain damage (Chain Lightning included). Spells the target resists 50%+ are skipped. `tools/spell_probe.gd` counts casts per spell on any map (`SIMMO_MAP`, `SIMMO_LEVEL`, `SIMMO_SIMS=1`, `SIMMO_SPRITE`).
 - Ultimates: 60 s cooldown, G only (not Shift: too easy to hit by accident). Auto-battle fires them on 3+ mobs nearby or a target with 6+ hits of HP left; the healer's Sanctuary fires when someone drops under 25% or two under 50%. Damage scales with `scale_cooldown`, not the 60 s.
 - Bosses: spawn after 30 kills on the map, immune to freeze and stun, enrage at 90 s (x2.5 damage, x1.6 speed, slams twice as often). A full auto party at the boss's level kills it in about 60-80 s (`tools/boss_probe.gd`). Auto-battle loots the chest and won't auto-advance while a boss or chest is pending.
 - Loot rarity weights: junk 28, common 30, magic 24, rare 12, epic 5, legendary 1. Gear base: 60% a weapon of the player's class. Gear can't be traded yet.

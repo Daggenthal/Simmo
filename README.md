@@ -30,6 +30,7 @@ Needs Godot 4.7 or newer: `brew install --cask godot`
 | Inventory window (click to use or equip) | I | |
 | Stats window (spend AP, auto-assign) | K | |
 | Trade with a party member | T | |
+| Party member menu (Inspect, Trade, Kick) | Right-click their frame or them | |
 | Chat tabs (All / Chat / Combat) | Y | |
 | Party on / off | P | |
 | Pause menu (settings, inventory, party) | Esc | |
@@ -54,7 +55,7 @@ Each class only uses its own weapons, has four skills and an ultimate:
 | Rogue | DEX | Dagger (start, stabs), Throwing Kunai | Lucky Seven (2 kunai), Venom Glob, Flurry (3 stabs), Haste (+30% attack speed) | Shadow Dance: vanish and blink between up to 8 mobs, 3 strikes each |
 | Priest | INT | Holy Scepter (+15% heals and Smite) | Heal, Renew (heal over time, 10 s), Prayer (party heal), Smite (holy bolt, +50% to undead) | Sanctuary: full party heal plus regeneration |
 
-Mages fight from range: they keep their distance and only walk in to melee when every spell is on cooldown. Skill slots show the seconds left on each cooldown.
+Mages fight from range: they keep their distance and only walk in to melee when no spell is coming back within 2 seconds. Auto-battle sets up combos first, then uses every other ready spell, skipping elements the target resists. Skill slots show the seconds left on each cooldown.
 
 Stats: STR, DEX, INT, LUK. Every attack scales with its own stat; STR adds HP, INT adds MP, DEX and LUK add crit, LUK raises item drops. Each level gives 5 AP; auto-assign (on by default) spends 4 on the main stat and 1 on the secondary. Turn it off in the stats window (K) to spend them yourself.
 
@@ -94,7 +95,7 @@ Gear (weapons for your class, rings, amulets) rolls STR / DEX / INT / LUK, damag
 
 Three Simmos join you: Brannoc (Warrior tank), Liriel (Priest healer) and xXKunaiXx (Rogue ranged). They follow you across platforms and through portals, fight by role (everyone assists your target; the tank in front; the ranged throws from where it stands or a nearby platform; the Priest stays behind the party, never melees, heals by priority and smites when nobody needs healing), use their ultimates, drink their own potions and ask for more when they run out. Kill XP is split with a party bonus. Invite and kick from the pause menu's Party tab; Goldvein and Fennick wait on the roster.
 
-Trade with T: click your items to offer, theirs to ask. Simmos accept gifts and fair deals and keep a couple of potions for themselves. They talk in party chat and in speech bubbles, without spamming.
+Right-click a Simmo (or its frame top right) to inspect it (class, stats, gear and bag), trade or kick. Trade with T or from that menu: click your items to offer, theirs to ask. Simmos accept gifts and fair deals and keep a couple of potions for themselves. They talk in party chat and in speech bubbles, without spamming.
 
 ## Items
 

@@ -64,6 +64,12 @@ func _dummy(idx: int, pos: Vector2, hp := 100000):
 	m.respawn()
 	return m
 
+func _spells_cast(p) -> Dictionary:
+	var used := {}
+	for e in p.cast_log:
+		used[e[1]] = int(used.get(e[1], 0)) + 1
+	return used
+
 func _place(p, pos: Vector2, face := 1) -> void:
 	p.position = pos
 	p.velocity = Vector2.ZERO
@@ -111,6 +117,33 @@ func _physics_process(_d: float) -> bool:
 				p.mp = p.max_mp
 			if _pf == 1080:
 				_check(absf(_m.position.x - p.position.x) > 60.0, "once spells are back it steps away again (%.0f px)" % absf(_m.position.x - p.position.x))
+				p.set_auto_battle(false)
+				_goto("rotation")
+		"rotation":
+			# Regression: Chain Lightning waited for a frozen target and never came; on maps whose
+			# mobs resist fire or poison the mage was left casting Frost Bolt alone.
+			# A sturdy dummy that resists nothing: all four spells within 20 s.
+			if _pf == 1:
+				_park_all()
+				_place(p, Vector2(400, 330))
+				_m = _dummy(0, Vector2(520, 329))
+				p.mp = p.max_mp
+				p.cast_log.clear()
+				p.set_auto_battle(true)
+			if _pf > 1 and _pf % 60 == 0:
+				p.mp = p.max_mp
+			if _pf == 1200:
+				var used := _spells_cast(p)
+				_check(used.size() == 4, "the mage rotates through all four spells (%s)" % str(used))
+				# Same, but the dummy shrugs off fire and poison: lightning and frost still go out.
+				_m.data.resist = {"fire": 0.6, "poison": 0.6}
+				_m.clear_statuses()
+				p.cast_log.clear()
+			if _pf == 2400:
+				var used := _spells_cast(p)
+				_check(used.has("chain_lightning") and used.has("frost_bolt") and not used.has("fireball") and not used.has("venom_glob"),
+					"against fire and poison resistance she casts Chain Lightning and Frost Bolt, not the resisted ones (%s)" % str(used))
+				_m.data.resist = {}
 				p.set_auto_battle(false)
 				_goto("cataclysm")
 		"cataclysm":
@@ -191,7 +224,7 @@ func _physics_process(_d: float) -> bool:
 			else:
 				_log.error("%d COMBAT AI CHECK(S) FAILED" % _failures)
 			quit(1 if _failures > 0 else 0)
-	if _frame > 5000:
+	if _frame > 8000:
 		_log.error("timeout in phase " + _phase)
 		quit(1)
 	return false

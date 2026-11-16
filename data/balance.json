@@ -57,6 +57,8 @@
     "auto_advance_zones": true,
     "mage_keep_distance": 110,
     "mage_too_close": 70,
+    "mage_wait_for_spell": 2.0,
+    "_doc_mage_wait": "A caster stays at range while any attack spell comes back within this many seconds (walking in for a shorter gap just means walking out again).",
     "_doc_scale": "Skills scale with their cooldown (slow hits hit harder). Ultimates use scale_cooldown instead, so a 60 s cooldown doesn't make them hit 60 s worth."
   },
   "mobs": {

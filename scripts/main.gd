@@ -24,6 +24,7 @@ var stats_ui: StatsUI
 var chat_box: ChatBox
 var chatter: Chatter
 var trade_ui: TradeUI
+var party_menu: PartyMenu
 var chat_data: Dictionary = {}
 var weather: Weather
 var sky_art: Control
@@ -167,6 +168,9 @@ func start_game(id: String, look: Dictionary = {}, player_name := "") -> void:
 	trade_ui.trade_cfg = items.get("trade", {})
 	trade_ui.chat = chat_data
 	layer.add_child(trade_ui)
+	party_menu = PartyMenu.new()
+	party_menu.main = self
+	layer.add_child(party_menu)
 	chatter = Chatter.new()
 	add_child(chatter)
 	chatter.setup(self, chat_data)
