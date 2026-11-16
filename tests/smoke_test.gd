@@ -15,6 +15,17 @@ var _auto_kills := 0
 var _weapon_ids: Array = []
 var _weapon_idx := 0
 var _swings_start := 0
+var _nav_idx := 0
+var _nav_max_y := 0.0
+var _nav_kills := 0
+## [start x, start platform y, mob x, mob platform y, label]
+const NAV_CASES := [
+	[550, 225, 380, 270, "higher platform -> lower platform on the left (the reported bug)"],
+	[1000, 208, 820, 270, "higher platform -> lower platform across a gap"],
+	[1450, 205, 1250, 268, "higher platform -> lower platform, wide gap"],
+	[380, 270, 550, 225, "lower platform -> higher platform on the right"],
+	[820, 270, 1000, 208, "lower platform -> higher platform across a gap"],
+]
 var _auto_min_y := 9999.0
 
 func _initialize() -> void:
@@ -186,13 +197,15 @@ func _physics_process(_delta: float) -> bool:
 				_goto("weapons")
 		"weapons":
 			_test_weapons(player, world)
+		"nav":
+			_test_nav(player, world)
 		"done":
 			if _failures == 0:
 				_log.ok("ALL CHECKS PASSED (%d frames)" % _frame)
 			else:
 				_log.error("%d CHECK(S) FAILED" % _failures)
 			quit(1 if _failures > 0 else 0)
-	if _frame > 5000:
+	if _frame > 15000:
 		_log.error("timeout in phase " + _phase)
 		quit(1)
 	return false
@@ -223,7 +236,7 @@ func _check_reachability(world, player) -> void:
 func _test_weapons(player, world) -> void:
 	if _weapon_idx >= _weapon_ids.size():
 		_weapon_balance(player, world)
-		_goto("done")
+		_goto("nav")
 		return
 	var wid: String = _weapon_ids[_weapon_idx]
 	if _phase_frame == 1:
@@ -280,3 +293,49 @@ func _weapon_balance(player, world) -> void:
 			m.global_position = player.global_position + Vector2(12 + j * 3, 0)
 		var hits: int = player._resolve_hit()
 		_check(hits == int(w[k].max_targets), "%s hits %d target(s) per swing (got %d)" % [w[k].name, w[k].max_targets, hits])
+
+## Auto-battle must go platform to platform without touching the ground when that's the short way.
+func _test_nav(player, world) -> void:
+	if _phase_frame == 1 and _nav_idx == 0:
+		var nav = world.nav
+		var missing := []
+		for a in nav.surfaces:
+			for b in nav.surfaces:
+				if a.id != b.id and nav.find_route(a.id, (a.x0 + a.x1) / 2.0, b.id, (b.x0 + b.x1) / 2.0).cost == INF:
+					missing.append("%d->%d" % [a.id, b.id])
+		_check(missing.is_empty(), "nav graph connects every surface (%d surfaces, %d links; missing %s)" % [nav.surfaces.size(), nav.links.size(), str(missing)])
+	if _nav_idx >= NAV_CASES.size():
+		_goto("done")
+		return
+	var c: Array = NAV_CASES[_nav_idx]
+	if _phase_frame == 1:
+		player.set_auto_battle(false)
+		var mob = world.mobs[0]
+		for m in world.mobs:
+			m.alive = false
+			m.visible = false
+			m.set_physics_process(false)
+		mob.home = Vector2(c[2], c[3] - 1)
+		mob.max_hp = int(mob.data.hp)
+		mob.set_bounds(world.nav)
+		mob.respawn()
+		mob.data = mob.data.duplicate()
+		mob.data.speed = 0.0
+		mob.data.hop_velocity = 0.0
+		player.position = Vector2(c[0], c[1])
+		player.velocity = Vector2.ZERO
+		_nav_kills = player.kills
+		_nav_max_y = 0.0
+	if _phase_frame == 6:
+		player.set_auto_battle(true)
+	if _phase_frame > 6:
+		_nav_max_y = max(_nav_max_y, player.position.y)
+	if OS.get_environment("NAV_TRACE") == "1" and _phase_frame % 20 == 0:
+		var mm = world.mobs[0]
+		print("trace f=%d player=(%.0f,%.0f) mob=(%.0f,%.0f) floor=%s mob_s=%d" % [_phase_frame, player.position.x, player.position.y, mm.position.x, mm.position.y, mm.is_on_floor(), world.nav.surface_at(mm.position.x, mm.position.y)])
+	if player.kills > _nav_kills or _phase_frame == 900:
+		_check(player.kills > _nav_kills and _nav_max_y < 300.0,
+			"auto-battle %s without touching the ground (%s in %d frames, lowest feet y=%.0f)" % [c[4], "killed" if player.kills > _nav_kills else "NOT killed", _phase_frame, _nav_max_y])
+		player.set_auto_battle(false)
+		_nav_idx += 1
+		_phase_frame = 0

@@ -23,6 +23,10 @@ var _flash := 0.0
 var _hp_bar_time := 0.0
 var _aggro: Node2D = null
 var _squash := 0.0
+## Edges of the platform this mob lives on; knockback and wandering stop here.
+var bound_x0 := -INF
+var bound_x1 := INF
+var bound_y := INF
 
 func setup(mob_id: String, mob_data: Dictionary, spawn: Vector2, gravity: float) -> void:
 	id = mob_id
@@ -34,6 +38,16 @@ func setup(mob_id: String, mob_data: Dictionary, spawn: Vector2, gravity: float)
 	home = spawn
 	position = spawn
 	_gravity = gravity
+
+## Keep this mob on its home surface (MapleStory style: knockback stops at the ledge).
+func set_bounds(nav: Nav) -> void:
+	var sid := nav.surface_at(home.x, home.y)
+	if sid < 0:
+		return
+	var surf: Dictionary = nav.surfaces[sid]
+	bound_x0 = surf.x0 + size.x / 2.0
+	bound_x1 = surf.x1 - size.x / 2.0
+	bound_y = surf.y
 
 func _ready() -> void:
 	add_to_group("mobs")
@@ -86,6 +100,13 @@ func _physics_process(delta: float) -> void:
 		_dir = -_dir
 
 	move_and_slide()
+	# Stay on the home platform: clamp at its edges while at platform height.
+	if absf(global_position.y - bound_y) < 14.0:
+		var cx := clampf(global_position.x, bound_x0, bound_x1)
+		if cx != global_position.x:
+			global_position.x = cx
+			velocity.x = 0.0
+			_dir = -_dir
 	_touch_player()
 	queue_redraw()
 

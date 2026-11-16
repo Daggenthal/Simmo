@@ -39,8 +39,8 @@ Needs Godot 4.7 or newer: `brew install --cask godot`
 
   Damage per second stays within about 20% across weapons, and the level bonus scales with swing time so slow weapons keep up as you level. All of it lives in `data/balance.json`; `attack_speed_scale` under `player` slows or speeds up every weapon at once (1.2 = 20% slower).
 - Crits, knockback and floating damage numbers
-- Three mob types (Green Slime, Blue Slime, Grumpy Stump) that wander, aggro when hit and respawn
-- Auto-battle: runs to the nearest reachable enemy, jumps up or drops down to its platform and attacks. Moving by hand takes over movement while auto keeps swinging at anything in front of you; 0.4 s after you let go it picks the nearest mob from where you are. It jumps across gaps between platforms and gives up on a mob it can't reach after 5 s
+- Three mob types (Green Slime, Blue Slime, Grumpy Stump) that wander, aggro when hit and respawn. Knockback stops at the edge of their platform, MapleStory style
+- Auto-battle: runs to the nearest reachable enemy, jumps up or drops down to its platform and attacks. Moving by hand takes over movement while auto keeps swinging at anything in front of you; 0.4 s after you let go it picks the nearest mob from where you are. It routes with a navigation graph (`scripts/nav.gd`): jump up, jump across gaps, walk off edges or drop through, picking the shortest real route and the nearest mob by travel distance. It gives up on a mob it can't reach after 5 s
 - XP, leveling, HP growth, death and respawn in town
 - Bottom status bar, wider screens show more of the world (fixed 360 px height, width expands)
 
@@ -49,7 +49,7 @@ Needs Godot 4.7 or newer: `brew install --cask godot`
 | Path | What |
 | --- | --- |
 | `data/balance.json` | All tuning numbers: player stats, mobs, respawn time |
-| `scripts/` | Game code (player, mob, world, HUD, logging, input) |
+| `scripts/` | Game code (player, mob, world, navigation, HUD, logging, input) |
 | `tests/smoke_test.gd` | Headless test that walks, jumps, drops through a platform and fights |
 | `tools/screenshot.gd` | Renders screenshots at any resolution for layout checks |
 

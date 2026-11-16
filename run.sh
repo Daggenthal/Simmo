@@ -34,10 +34,13 @@ if [[ -z "$GODOT_BIN" ]]; then
 fi
 echo "${GREEN}Using Godot:${RESET} $GODOT_BIN ($("$GODOT_BIN" --version 2>/dev/null | head -1))"
 
-# First run: import the project so class names resolve.
-if [[ ! -d .godot ]]; then
-	echo "${YELLOW}First run, importing project...${RESET}"
+# Import on first run, and again whenever a script is newer than Godot's class cache,
+# so new class_name scripts resolve when running from the terminal.
+CACHE=.godot/global_script_class_cache.cfg
+if [[ ! -f "$CACHE" ]] || [[ -n "$(find . -name '*.gd' -newer "$CACHE" -not -path './.godot/*' -print -quit)" ]]; then
+	echo "${YELLOW}Scripts changed, re-importing project...${RESET}"
 	"$GODOT_BIN" --headless --import --path . >/dev/null 2>&1
+	touch "$CACHE"
 fi
 
 case "${1:-play}" in

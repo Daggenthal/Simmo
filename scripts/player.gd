@@ -35,6 +35,7 @@ var swings := 0
 var _auto_retarget := 0.0
 var _auto_target: Mob = null
 var _auto_was_manual := false
+var _nav_link: Dictionary = {}
 var _chase_time := 0.0
 var _ignored: Dictionary = {} # mob -> seconds left; targets auto-battle gave up on
 var auto_battle := false
@@ -161,8 +162,8 @@ func set_auto_battle(on: bool) -> void:
 	Log.info("Auto-battle %s" % ("on" if on else "off"))
 	stats_changed.emit()
 
-## Auto-battle: pick the nearest reachable mob, walk to it, jump up or drop down
-## to its platform, and attack when in range.
+## Auto-battle: pick the nearest mob by real travel distance (nav graph),
+## follow the route there (jump up, jump across, walk off, drop), then attack.
 func _auto_think(delta: float) -> Dictionary:
 	var i := {"dir": 0.0, "jump": false, "jump_release": false, "down": false, "attack": false}
 	_auto_retarget -= delta
@@ -176,7 +177,9 @@ func _auto_think(delta: float) -> Dictionary:
 		Log.dbg("auto-battle giving up on %s at %s" % [_auto_target.id, _auto_target.position])
 		_ignored[_auto_target] = 4.0
 		_auto_target = null
-	if _auto_target == null or not is_instance_valid(_auto_target) or not _auto_target.alive or _auto_retarget <= 0.0:
+	var lost: bool = _auto_target == null or not is_instance_valid(_auto_target) or not _auto_target.alive
+	# Only re-plan while standing on something, so routes start from a known surface.
+	if lost or (_auto_retarget <= 0.0 and is_on_floor()):
 		_auto_retarget = float(cfg.auto_retarget)
 		var picked := _pick_target()
 		if picked != _auto_target:
@@ -185,59 +188,70 @@ func _auto_think(delta: float) -> Dictionary:
 	var t: Mob = _auto_target
 	if t == null:
 		return i
-	var my_y := global_position.y
-	var t_y := t.global_position.y if t.is_on_floor() else t.home.y
-	var dx := t.global_position.x - global_position.x
-	var dy := t_y - my_y
+	var x := global_position.x
+	var dx := t.global_position.x - x
+	# In the air: steer toward where the current move should land.
+	if not is_on_floor():
+		if not _nav_link.is_empty():
+			var to_land: float = _nav_link.land_x - x
+			i.dir = signf(to_land) if absf(to_land) > 3.0 else 0.0
+		return i
+	_nav_link = {}
+	var t_y := _mob_surface_y(t)
+	var my_s := world.nav.surface_at(x, global_position.y) if world else -1
+	var t_s := world.nav.surface_at(t.global_position.x, t_y) if world else -1
 	var reach := float(weapon.range) * 0.8 + W / 2.0 + t.size.x / 2.0
-	if dy < -12.0:
-		# Target is above: get under its platform, then jump.
-		var plat := world.platform_at(t.global_position.x, t_y) if world else {}
-		if plat.is_empty():
+	if my_s == t_s or my_s < 0 or t_s < 0:
+		if absf(dx) > reach:
 			i.dir = signf(dx)
-		else:
-			var under: bool = global_position.x >= plat.x + 4 and global_position.x <= plat.x + plat.w - 4
-			var x := global_position.x
-			var edge_gap: float = plat.x - x if x < plat.x else (x - (plat.x + plat.w) if x > plat.x + plat.w else 0.0)
-			if not under and is_on_floor() and edge_gap <= 36.0:
-				# Platform is beside us: jump across the gap toward it.
-				i.jump = true
-				i.dir = signf(plat.x + plat.w / 2.0 - x)
-			elif under and is_on_floor():
-				i.jump = true
-				i.dir = signf(dx) * 0.4
-			elif not under:
-				var aim: float = clampf(t.global_position.x, plat.x + 10, plat.x + plat.w - 10)
-				i.dir = signf(aim - global_position.x)
-			else:
-				i.dir = signf(dx) * 0.4
-	elif dy > 12.0 and is_on_floor() and _on_platform():
-		# Target is below: drop through this platform.
-		i.down = true
-		i.jump = true
-	elif absf(dx) > reach:
+		elif absf(t_y - global_position.y) < 20.0:
+			facing = 1 if dx >= 0.0 else -1
+			i.attack = true
+			_chase_time = 0.0
+		return i
+	var route: Dictionary = world.nav.find_route(my_s, x, t_s, t.global_position.x)
+	if route.links.is_empty():
 		i.dir = signf(dx)
-	else:
-		facing = 1 if dx >= 0.0 else -1
-		i.attack = true
-		_chase_time = 0.0
+		return i
+	var l: Dictionary = route.links[0]
+	var to_depart: float = l.depart_x - x
+	if absf(to_depart) > 4.0 and not (l.kind == "walk_off" and signf(to_depart) != l.dir):
+		i.dir = signf(to_depart)
+		return i
+	_nav_link = l
+	match l.kind:
+		"jump_up":
+			i.jump = true
+		"jump_across":
+			i.jump = true
+			i.dir = l.dir
+		"walk_off":
+			i.dir = l.dir
+		"drop":
+			i.down = true
+			i.jump = true
+	Log.dbg("auto: %s from surface %d to %d" % [l.kind, l.from, l.to])
 	return i
 
+func _mob_surface_y(m: Mob) -> float:
+	return m.global_position.y if m.is_on_floor() else m.home.y
+
+## Nearest live mob by travel cost along the nav graph. Unreachable mobs are skipped.
 func _pick_target() -> Mob:
 	var best: Mob = null
-	var best_score := INF
-	var max_up := pow(float(cfg.jump_velocity), 2) / (2.0 * float(cfg.gravity)) - 4.0
-	var my_y := global_position.y
+	var best_cost := INF
+	var my_s := world.nav.surface_at(global_position.x, global_position.y) if world else -1
 	for m in get_tree().get_nodes_in_group("mobs"):
 		if not m.alive or _ignored.has(m):
 			continue
-		var t_y: float = m.global_position.y if m.is_on_floor() else m.home.y
-		var dy := t_y - my_y
-		if is_on_floor() and dy < -max_up:
-			continue # Too high to reach in one jump from here.
-		var score := absf(m.global_position.x - global_position.x) + absf(dy) * 3.0
-		if score < best_score:
-			best_score = score
+		var cost: float
+		if world and my_s >= 0:
+			var t_s := world.nav.surface_at(m.global_position.x, _mob_surface_y(m))
+			cost = world.nav.find_route(my_s, global_position.x, t_s, m.global_position.x).cost
+		else:
+			cost = absf(m.global_position.x - global_position.x) + absf(_mob_surface_y(m) - global_position.y) * 3.0
+		if cost < best_cost:
+			best_cost = cost
 			best = m
 	return best
 

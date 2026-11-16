@@ -34,6 +34,7 @@ const SPAWNS := [
 ]
 
 var spawn_point := Vector2(120, GROUND_Y)
+var nav := Nav.new()
 var mobs: Array[Mob] = []
 var _balance: Dictionary
 var _respawn_queue: Array = []
@@ -47,6 +48,11 @@ func build(balance: Dictionary) -> void:
 		_platform(Rect2(p[0], p[1], p[2], 8))
 	for s in SPAWNS:
 		_spawn_mob(s[0], Vector2(s[1], s[2] - 1))
+	var pl: Dictionary = balance.player
+	nav.build(GROUND_Y, MAP_W, PLATFORMS, pow(float(pl.jump_velocity), 2) / (2.0 * float(pl.gravity)))
+	for m in mobs:
+		m.set_bounds(nav)
+	Log.dbg("nav graph: %d surfaces, %d links" % [nav.surfaces.size(), nav.links.size()])
 	Log.ok("World built: %d platforms, %d mobs" % [PLATFORMS.size(), mobs.size()])
 	queue_redraw()
 
