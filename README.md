@@ -33,14 +33,14 @@ Needs Godot 4.7 or newer: `brew install --cask godot`
 
 | Weapon | Speed | Swing delay | Damage per hit | Hits up to | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Dagger | Fast | 0.30 s | 6 to 9 | 1 enemy | Short reach, light knockback |
-| Short Sword | Normal | 0.50 s | 11 to 15 | 2 enemies | Starting weapon |
-| Iron Hammer | Slow | 0.95 s | 24 to 32 | 4 enemies | 0.18 s wind-up, long reach, big knockback |
+| Dagger | Fast | 0.55 s | 12 to 16 | 1 enemy | Short reach, light knockback |
+| Short Sword | Normal | 0.80 s | 19 to 25 | 2 enemies | Starting weapon |
+| Iron Hammer | Slow | 1.30 s | 34 to 44 | 4 enemies | 0.25 s wind-up, long reach, big knockback |
 
-  Damage per second stays within about 20% across weapons, and the level bonus scales with swing time so slow weapons keep up as you level. All of it lives in `data/balance.json`.
+  Damage per second stays within about 20% across weapons, and the level bonus scales with swing time so slow weapons keep up as you level. All of it lives in `data/balance.json`; `attack_speed_scale` under `player` slows or speeds up every weapon at once (1.2 = 20% slower).
 - Crits, knockback and floating damage numbers
 - Three mob types (Green Slime, Blue Slime, Grumpy Stump) that wander, aggro when hit and respawn
-- Auto-battle: runs to the nearest reachable enemy, jumps up or drops down to its platform and attacks. Any manual input takes over, and auto resumes 1.5 s after you let go
+- Auto-battle: runs to the nearest reachable enemy, jumps up or drops down to its platform and attacks. Moving by hand takes over movement while auto keeps swinging at anything in front of you; 0.4 s after you let go it picks the nearest mob from where you are. It jumps across gaps between platforms and gives up on a mob it can't reach after 5 s
 - XP, leveling, HP growth, death and respawn in town
 - Bottom status bar, wider screens show more of the world (fixed 360 px height, width expands)
 

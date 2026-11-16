@@ -34,6 +34,9 @@ var weapon_key := ""
 var swings := 0
 var _auto_retarget := 0.0
 var _auto_target: Mob = null
+var _auto_was_manual := false
+var _chase_time := 0.0
+var _ignored: Dictionary = {} # mob -> seconds left; targets auto-battle gave up on
 var auto_battle := false
 var world: World
 var _spawn_point := Vector2.ZERO
@@ -86,11 +89,21 @@ func _physics_process(delta: float) -> void:
 			set_collision_mask_value(LAYER_PLATFORMS, true)
 
 	var intent := _read_manual()
-	if intent.active:
-		# Manual input always wins; auto-battle resumes after a short pause.
-		_auto_pause = float(cfg.auto_pause_after_input)
-	elif auto_battle and _auto_pause <= 0.0:
-		intent = _auto_think(delta)
+	if auto_battle:
+		if intent.active:
+			# Manual movement wins, but auto keeps swinging at anything in front of you.
+			_auto_pause = float(cfg.auto_pause_after_input)
+			_auto_was_manual = true
+			if not intent.attack and _mob_in_front():
+				intent.attack = true
+		elif _auto_pause <= 0.0:
+			if _auto_was_manual:
+				# Pick a fresh target from wherever the player steered to.
+				_auto_was_manual = false
+				_auto_target = null
+			intent = _auto_think(delta)
+		elif _mob_in_front():
+			intent.attack = true
 	_apply(intent, delta)
 	move_and_slide()
 	queue_redraw()
@@ -142,6 +155,8 @@ func _apply(i: Dictionary, delta: float) -> void:
 func set_auto_battle(on: bool) -> void:
 	auto_battle = on
 	_auto_target = null
+	_ignored.clear()
+	_chase_time = 0.0
 	_auto_pause = 0.0
 	Log.info("Auto-battle %s" % ("on" if on else "off"))
 	stats_changed.emit()
@@ -151,9 +166,22 @@ func set_auto_battle(on: bool) -> void:
 func _auto_think(delta: float) -> Dictionary:
 	var i := {"dir": 0.0, "jump": false, "jump_release": false, "down": false, "attack": false}
 	_auto_retarget -= delta
+	for m in _ignored.keys():
+		_ignored[m] -= delta
+		if _ignored[m] <= 0.0:
+			_ignored.erase(m)
+	# Give up on a target we've chased too long without landing a swing (unreachable).
+	_chase_time += delta
+	if _auto_target and _chase_time > float(cfg.auto_give_up_time):
+		Log.dbg("auto-battle giving up on %s at %s" % [_auto_target.id, _auto_target.position])
+		_ignored[_auto_target] = 4.0
+		_auto_target = null
 	if _auto_target == null or not is_instance_valid(_auto_target) or not _auto_target.alive or _auto_retarget <= 0.0:
 		_auto_retarget = float(cfg.auto_retarget)
-		_auto_target = _pick_target()
+		var picked := _pick_target()
+		if picked != _auto_target:
+			_chase_time = 0.0
+		_auto_target = picked
 	var t: Mob = _auto_target
 	if t == null:
 		return i
@@ -169,7 +197,13 @@ func _auto_think(delta: float) -> Dictionary:
 			i.dir = signf(dx)
 		else:
 			var under: bool = global_position.x >= plat.x + 4 and global_position.x <= plat.x + plat.w - 4
-			if under and is_on_floor():
+			var x := global_position.x
+			var edge_gap: float = plat.x - x if x < plat.x else (x - (plat.x + plat.w) if x > plat.x + plat.w else 0.0)
+			if not under and is_on_floor() and edge_gap <= 36.0:
+				# Platform is beside us: jump across the gap toward it.
+				i.jump = true
+				i.dir = signf(plat.x + plat.w / 2.0 - x)
+			elif under and is_on_floor():
 				i.jump = true
 				i.dir = signf(dx) * 0.4
 			elif not under:
@@ -186,6 +220,7 @@ func _auto_think(delta: float) -> Dictionary:
 	else:
 		facing = 1 if dx >= 0.0 else -1
 		i.attack = true
+		_chase_time = 0.0
 	return i
 
 func _pick_target() -> Mob:
@@ -194,7 +229,7 @@ func _pick_target() -> Mob:
 	var max_up := pow(float(cfg.jump_velocity), 2) / (2.0 * float(cfg.gravity)) - 4.0
 	var my_y := global_position.y
 	for m in get_tree().get_nodes_in_group("mobs"):
-		if not m.alive:
+		if not m.alive or _ignored.has(m):
 			continue
 		var t_y: float = m.global_position.y if m.is_on_floor() else m.home.y
 		var dy := t_y - my_y
@@ -224,10 +259,11 @@ func _drop_through() -> void:
 ## Start a swing. Light weapons swing often, heavy ones slowly but harder.
 ## The hit lands after the weapon's wind-up; the next swing waits for the cooldown.
 func attack() -> void:
-	_attack_cd = float(weapon.cooldown)
-	_swing_len = maxf(float(weapon.windup) + 0.12, 0.15)
+	var scale := float(cfg.get("attack_speed_scale", 1.0))
+	_attack_cd = float(weapon.cooldown) * scale
+	_swing_len = maxf(float(weapon.windup) * scale + 0.16, 0.2)
 	_swing_time = _swing_len
-	_pending_hit = float(weapon.windup)
+	_pending_hit = float(weapon.windup) * scale
 	swings += 1
 	if _pending_hit <= 0.0:
 		_resolve_hit()
@@ -235,10 +271,7 @@ func attack() -> void:
 ## Hit up to max_targets mobs in front, closest first. Returns how many were hit.
 func _resolve_hit() -> int:
 	_pending_hit = -1.0
-	var reach := float(weapon.range)
-	var tall := float(weapon.height)
-	var center := global_position + Vector2(facing * (W / 2.0 + reach / 2.0), -H / 2.0)
-	var box := Rect2(center - Vector2(reach / 2.0, tall / 2.0), Vector2(reach, tall))
+	var box := attack_box()
 	var targets := []
 	for mob in get_tree().get_nodes_in_group("mobs"):
 		if mob.is_alive() and box.intersects(mob.hurt_rect()):
@@ -250,6 +283,20 @@ func _resolve_hit() -> int:
 		mob.take_hit(dmg.amount, dmg.crit, facing, self, float(weapon.knockback))
 		hits += 1
 	return hits
+
+## The area a swing covers right now, in front of the player.
+func attack_box() -> Rect2:
+	var reach := float(weapon.range)
+	var tall := float(weapon.height)
+	var center := global_position + Vector2(facing * (W / 2.0 + reach / 2.0), -H / 2.0)
+	return Rect2(center - Vector2(reach / 2.0, tall / 2.0), Vector2(reach, tall))
+
+func _mob_in_front() -> bool:
+	var box := attack_box()
+	for mob in get_tree().get_nodes_in_group("mobs"):
+		if mob.alive and box.intersects(mob.hurt_rect()):
+			return true
+	return false
 
 func equip(weapon_id: String) -> void:
 	if not weapons.has(weapon_id):
@@ -277,7 +324,7 @@ func weapon_dps(w: Dictionary) -> float:
 	var bonus := (level - 1) * float(cfg.damage_per_level) * float(w.cooldown) / float(cfg.level_bonus_reference_cooldown)
 	var avg := (float(w.damage_min) + float(w.damage_max)) / 2.0 + bonus
 	avg *= 1.0 + float(cfg.crit_chance) * (float(cfg.crit_mult) - 1.0)
-	return avg / float(w.cooldown)
+	return avg / (float(w.cooldown) * float(cfg.get("attack_speed_scale", 1.0)))
 
 func take_damage(amount: int, from_x: float) -> void:
 	if _invuln > 0.0 or hp <= 0:
@@ -335,7 +382,7 @@ func _draw() -> void:
 	if _swing_time > 0.0:
 		var t := 1.0 - _swing_time / _swing_len
 		# Heavy weapons pull back during the wind-up before the swing comes down.
-		var wind := float(weapon.windup) / _swing_len
+		var wind := float(weapon.windup) * float(cfg.get("attack_speed_scale", 1.0)) / _swing_len
 		var angle: float
 		if t < wind:
 			angle = lerpf(-1.2, -1.9, t / wind) * facing

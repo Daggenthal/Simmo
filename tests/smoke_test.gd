@@ -125,8 +125,33 @@ func _physics_process(_delta: float) -> bool:
 				player.set_auto_battle(true)
 				Input.action_press("move_left")
 			if _phase_frame == 30:
-				_check(player.facing == -1 and player._auto_pause > 1.0, "manual input overrides auto-battle (facing %d, auto paused %.2fs)" % [player.facing, player._auto_pause])
+				_check(player.facing == -1 and player._auto_pause > 0.0, "manual input overrides auto-battle (facing %d, auto paused %.2fs)" % [player.facing, player._auto_pause])
 				Input.action_release("move_left")
+				_goto("resume")
+		"resume":
+			# After letting go, auto must pick a target from the new spot within half a second.
+			if _phase_frame == 30:
+				var t = player._auto_target
+				_check(t != null and t.alive and (absf(player.velocity.x) > 1.0 or player._swing_time > 0.0),
+					"auto-battle resumes within 0.5s of letting go (target %s, vx %.0f)" % [str(t.id) if t else "none", player.velocity.x])
+				# Steering by hand with a mob right in front: auto keeps swinging.
+				var m = null
+				for mm in world.mobs:
+					if mm.alive:
+						m = mm
+						break
+				m.max_hp = 99999
+				m.hp = 99999
+				m.set_physics_process(false)
+				player.facing = 1
+				m.global_position = player.global_position + Vector2(14, 0)
+				_swings_start = player.swings
+				Input.action_press("move_down")
+			if _phase_frame == 90:
+				Input.action_release("move_down")
+				_check(player.swings > _swings_start, "auto-battle keeps attacking while you steer (%d swings)" % (player.swings - _swings_start))
+				for mm in world.mobs:
+					mm.respawn()
 				player.set_auto_battle(false)
 				_goto("fight")
 		"fight":
@@ -212,7 +237,7 @@ func _test_weapons(player, world) -> void:
 		Input.action_press("attack")
 	if _phase_frame == 181:
 		Input.action_release("attack")
-		var cd := float(player.weapon.cooldown)
+		var cd := float(player.weapon.cooldown) * float(player.cfg.get("attack_speed_scale", 1.0))
 		var got: int = player.swings - _swings_start
 		var expect := int(ceil(3.0 / cd))
 		_check(absi(got - expect) <= 1, "%s swings every %.2fs while held (%d swings in 3s, expected ~%d)" % [player.weapon.name, cd, got, expect])
