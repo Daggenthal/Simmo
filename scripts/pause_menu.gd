@@ -10,13 +10,19 @@ extends Control
 
 const TABS := ["Settings", "Inventory", "Party"]
 const W := 420.0
-const H := 270.0
+const H := 318.0
+const ROW := 16.0
+## Window sizes: whole multiples of the 640x360 canvas, so everything stays pixel sharp.
+const WINDOW_SIZES := ["auto", "1280x720", "1920x1080", "2560x1440", "3840x2160"]
+const FPS_CAPS := [0, 60, 120, 144, 165, 240]
 
 var main: Node
 var tab := "Settings"
 var settings_path := "user://settings.cfg"
-var settings := {"master": 0.9, "effects": 0.8, "ambient": 0.6, "mute": false, "weather": true, "day_cycle": true,
-	"time": 0.4, "auto_advance": true, "show_help": true}
+const DEFAULTS := {"master": 0.9, "effects": 0.8, "ambient": 0.6, "mute": false, "weather": true, "day_cycle": true,
+	"time": 0.4, "auto_advance": true, "show_help": true,
+	"window": "auto", "fullscreen": false, "vsync": false, "fps_cap": 0, "show_fps": false}
+var settings := DEFAULTS.duplicate()
 var status := ""
 var _font: Font
 var _drag := ""
@@ -62,7 +68,44 @@ func save_settings() -> void:
 	cf.save(settings_path)
 
 ## Push the settings into the game.
+## Window size, fullscreen, VSync and frame cap. Gameplay runs on the fixed 60 Hz physics tick
+## (with interpolation for smooth drawing), so none of these change how the game plays.
+func apply_display() -> void:
+	Engine.max_fps = int(settings.fps_cap)
+	if DisplayServer.get_name() == "headless":
+		return
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if bool(settings.vsync) else DisplayServer.VSYNC_DISABLED)
+	if bool(settings.fullscreen):
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		return
+	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	var size := window_size(String(settings.window))
+	if DisplayServer.window_get_size() != size:
+		DisplayServer.window_set_size(size)
+		var screen := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen())
+		DisplayServer.window_set_position(screen.position + (screen.size - size) / 2)
+
+## Pixel size for a WINDOW_SIZES entry; "auto" is the biggest that fits the screen.
+static func window_size(choice: String) -> Vector2i:
+	if choice != "auto":
+		var parts := choice.split("x")
+		return Vector2i(int(parts[0]), int(parts[1]))
+	var usable := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen()).size
+	var best := Vector2i(1280, 720)
+	for c in WINDOW_SIZES.slice(1):
+		var parts: PackedStringArray = String(c).split("x")
+		var sz := Vector2i(int(parts[0]), int(parts[1]))
+		if sz.x <= usable.x * 0.97 and sz.y <= usable.y * 0.95:
+			best = sz
+	return best
+
 func apply_settings() -> void:
+	# Saved files from older versions miss newer keys: fill them from the defaults.
+	for k in DEFAULTS:
+		if not settings.has(k):
+			settings[k] = DEFAULTS[k]
+	apply_display()
 	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(float(settings.master), 0.0001)))
 	AudioServer.set_bus_mute(0, bool(settings.mute))
 	Sfx.sfx_volume = float(settings.effects)
@@ -79,6 +122,7 @@ func apply_settings() -> void:
 		main.player.cfg.auto_advance_zones = bool(settings.auto_advance)
 	if main.hud:
 		main.hud.show_help = bool(settings.show_help)
+		main.hud.show_fps = bool(settings.show_fps)
 
 func set_setting(key: String, value) -> void:
 	settings[key] = value
@@ -96,6 +140,11 @@ func setting_rows() -> Array:
 		["time", "Time of day (cycle off)", "slider"],
 		["auto_advance", "Auto-battle moves to the next map", "toggle"],
 		["show_help", "Show the controls panel", "toggle"],
+		["window", "Window size", "choice", WINDOW_SIZES],
+		["fullscreen", "Fullscreen", "toggle"],
+		["vsync", "VSync (off = uncapped)", "toggle"],
+		["fps_cap", "Frame rate cap", "choice", FPS_CAPS],
+		["show_fps", "Show FPS", "toggle"],
 	]
 
 # --- layout ---
@@ -110,11 +159,11 @@ func tab_rect(n: int) -> Rect2:
 
 func setting_rect(n: int) -> Rect2:
 	var p := panel()
-	return Rect2(p.position.x + 12, p.position.y + 46 + n * 19, W - 24, 16)
+	return Rect2(p.position.x + 12, p.position.y + 44 + n * ROW, W - 24, ROW - 2)
 
 func slider_rect(n: int) -> Rect2:
 	var r := setting_rect(n)
-	return Rect2(r.position.x + 200, r.position.y + 4, r.size.x - 240, 8)
+	return Rect2(r.position.x + 200, r.position.y + 3, r.size.x - 240, 7)
 
 func inv_slot(k: int) -> Rect2:
 	var p := panel()
@@ -192,6 +241,12 @@ func click(pos: Vector2) -> void:
 				if rows[n][2] == "slider" and slider_rect(n).grow(4).has_point(pos):
 					_drag = rows[n][0]
 					_set_slider(_drag, pos)
+				elif rows[n][2] == "choice" and setting_rect(n).has_point(pos):
+					# Right half steps forward, left half back.
+					var opts: Array = rows[n][3]
+					var step := 1 if pos.x > setting_rect(n).get_center().x else -1
+					set_setting(rows[n][0], opts[posmod(opts.find(settings[rows[n][0]]) + step, opts.size())])
+					Sfx.play("ui_click", 0.5)
 				elif rows[n][2] == "toggle" and setting_rect(n).has_point(pos):
 					set_setting(rows[n][0], not bool(settings[rows[n][0]]))
 					Sfx.play("ui_click", 0.5)
@@ -282,6 +337,20 @@ func _draw_settings() -> void:
 			draw_rect(Rect2(s.position.x + s.size.x * v - 2, s.position.y - 2, 4, s.size.y + 4), Color.WHITE)
 			var label := "%d%%" % int(round(v * 100.0)) if key != "time" else _time_label(v)
 			_str(Vector2(s.end.x + 6, s.position.y + 8), label, Color(0.8, 0.85, 0.9), 7)
+		elif rows[n][2] == "choice":
+			var v = settings[key]
+			var label := str(v)
+			if key == "fps_cap":
+				label = "Uncapped" if int(v) == 0 else "%d FPS" % int(v)
+			elif key == "window" and String(v) == "auto":
+				var a := window_size("auto")
+				label = "Fit screen (%dx%d)" % [a.x, a.y]
+			var cr := Rect2(r.end.x - 150, r.position.y + 1, 146, r.size.y - 2)
+			draw_rect(cr, Color(1, 1, 1, 0.08))
+			_str(cr.position + Vector2(4, 10), "<", Color.WHITE, 8)
+			_str(cr.position + Vector2(cr.size.x - 10, 10), ">", Color.WHITE, 8)
+			var lw := _font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+			_str(cr.position + Vector2((cr.size.x - lw) / 2.0, 10), label, Color.WHITE, 8)
 		else:
 			var on := bool(settings[key])
 			var b := Rect2(r.end.x - 36, r.position.y + 2, 32, 12)

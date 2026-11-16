@@ -196,6 +196,71 @@ func _u(world: Vector2) -> Vector2:
 	return (world - origin) / U
 
 # --- drawing ---
+# MapleStory-style rendering: every part is a smooth shape (ellipses, capsules, rounded boxes)
+# with an antialiased dark outline in a deep shade of its own color, a shadow side away from the
+# light (back and below), and a highlight edge toward it. Units: 1 = 0.5 world px; at 1080p and up
+# that's 1.5+ screen pixels per unit, so the fine lines here land on real pixels.
+
+const OUTLINE := 1.1
+const HEAD_R := 15.0
+
+func _hc(f: float, bob: float) -> Vector2:
+	return Vector2(f * 1.0, -52 + bob)
+
+## Outline color for a fill: much darker, slightly cooler.
+static func _ol(col: Color) -> Color:
+	return Color(col.r * 0.28, col.g * 0.26, col.b * 0.34, 1.0)
+
+static func _ellipse(c: Vector2, rx: float, ry: float, segs := 28, rot := 0.0) -> PackedVector2Array:
+	var p := PackedVector2Array()
+	for k in segs:
+		var a := TAU * k / segs
+		p.append(c + Vector2(cos(a) * rx, sin(a) * ry).rotated(rot))
+	return p
+
+## Rounded box.
+static func _rrect(r: Rect2, rad: float, segs := 4) -> PackedVector2Array:
+	rad = minf(rad, minf(r.size.x, r.size.y) / 2.0)
+	var p := PackedVector2Array()
+	var corners := [[r.end.x - rad, r.position.y + rad, -PI / 2.0], [r.end.x - rad, r.end.y - rad, 0.0], [r.position.x + rad, r.end.y - rad, PI / 2.0], [r.position.x + rad, r.position.y + rad, PI]]
+	for cdef in corners:
+		for k in segs + 1:
+			var a: float = cdef[2] + (PI / 2.0) * k / segs
+			p.append(Vector2(cdef[0], cdef[1]) + Vector2(cos(a), sin(a)) * rad)
+	return p
+
+## Tapered capsule from a (radius ra) to b (radius rb): limbs, sleeves, hair locks. Always convex.
+static func _capsule(a: Vector2, b: Vector2, ra: float, rb: float, segs := 7) -> PackedVector2Array:
+	var d := b - a
+	if d.length() < 0.01:
+		d = Vector2(0, 0.01)
+	var ang := d.angle()
+	var p := PackedVector2Array()
+	for k in segs + 1:
+		var t := PI / 2.0 + PI * k / segs
+		p.append(a + Vector2(cos(ang + t), sin(ang + t)) * ra)
+	for k in segs + 1:
+		var t := -PI / 2.0 + PI * k / segs
+		p.append(b + Vector2(cos(ang + t), sin(ang + t)) * rb)
+	return p
+
+## Fill, then outline (antialiased).
+func _shape(ci: CanvasItem, poly: PackedVector2Array, fill: Color, line := OUTLINE) -> void:
+	if poly.size() < 3:
+		return
+	ci.draw_colored_polygon(poly, fill)
+	var closed := poly.duplicate()
+	closed.append(poly[0])
+	ci.draw_polyline(closed, _ol(fill), line, true)
+
+## A filled shape with a shadow band on the side away from `light_dir` (unit), then the outline.
+func _shaded(ci: CanvasItem, poly: PackedVector2Array, fill: Color, shade: PackedVector2Array, line := OUTLINE) -> void:
+	ci.draw_colored_polygon(poly, fill)
+	if shade.size() >= 3:
+		ci.draw_colored_polygon(shade, fill.darkened(0.2))
+	var closed := poly.duplicate()
+	closed.append(poly[0])
+	ci.draw_polyline(closed, _ol(fill), line, true)
 
 ## Body, in the canvas item's local space (feet at 0,0). hand: world-local position of the weapon hand.
 ## at / zoom place and enlarge it for previews (character creator, class cards).
@@ -205,110 +270,160 @@ func draw(ci: CanvasItem, hand: Vector2, at := Vector2.ZERO, zoom := 1.0) -> voi
 	var bob := _bob()
 	var swing := sin(walk) * 0.55 * speed_frac
 	_draw_cape(ci, f)
-	_draw_back_hair(ci, f)
+	_draw_back_hair(ci, f, bob)
 	# Back arm
-	var sh_b := Vector2(-f * 7.0, -36 + bob)
+	var sh_b := Vector2(-f * 6.5, -37 + bob)
 	var hand_b := sh_b + Vector2(sin(-swing * 0.9 - 0.15) * 13.0 * f, cos(swing * 0.9) * 13.0)
 	if airborne:
 		hand_b = sh_b + Vector2(-f * 8.0, -6.0)
-	_limb(ci, sh_b, hand_b, c("top_color").darkened(0.25), c("skin").darkened(0.15), 5.0, _long_sleeves())
-	# Legs
-	var hip := Vector2(0, -20 + bob * 0.3)
+	_arm(ci, sh_b, hand_b, true)
+	# Legs: back leg, then front leg.
+	var hip := Vector2(0, -21 + bob * 0.3)
 	for side: float in [-1.0, 1.0]:
 		var a := swing * side
 		if airborne:
 			a = (0.45 if side > 0 else -0.35) * (1.0 if vy < 0.0 else 0.6)
-		var knee := hip + Vector2(side * 2.5 * f, 0) + Vector2(sin(a) * 8.0 * f, cos(a) * 8.0)
-		var foot := knee + Vector2(sin(a * (0.4 if not airborne else 1.6)) * 8.0 * f, 8.0)
+		var top := hip + Vector2(side * 2.6 * f, 0)
+		var knee := top + Vector2(sin(a) * 9.5 * f, cos(a) * 9.5)
+		var foot := knee + Vector2(sin(a * (0.4 if not airborne else 1.6)) * 10.0 * f, 10.0)
 		if not airborne:
-			foot.y = minf(foot.y, -1.0)
-		var leg_col := c("bottom_color") if String(look.bottom) in ["pants"] else c("skin")
-		var top_col := c("bottom_color")
-		var shade := 0.12 if side < 0 else 0.0
-		ci.draw_line(hip + Vector2(side * 2.5 * f, 0), knee, top_col.darkened(shade), 6.0)
-		ci.draw_line(knee, foot, leg_col.darkened(shade), 5.5)
-		_shoe(ci, foot, f, shade)
+			# Planted: soles on the ground (y 0); the swinging foot lifts a little.
+			foot.y = -0.8 - maxf(0.0, -sin(walk) * side) * 2.5 * speed_frac
+		_leg(ci, top, knee, foot, f, side < 0)
 	_draw_skirt(ci, f, bob)
 	_draw_torso(ci, f, bob)
 	_draw_head(ci, f, bob)
 	_draw_front_hair(ci, f, bob)
 	_draw_hat(ci, f, bob)
 	if String(look.cape) == "scarf":
-		ci.draw_rect(Rect2(-7, -41 + bob, 14, 4), c("cape_color"))
-		ci.draw_rect(Rect2(-7, -38 + bob, 14, 1), c("cape_color").darkened(0.3))
-	# Front arm to the weapon hand.
-	var sh_f := Vector2(f * 6.0, -36 + bob)
-	_limb(ci, sh_f, _u(origin + hand), c("top_color"), c("skin"), 5.0, _long_sleeves())
+		var sc := c("cape_color")
+		_shape(ci, _rrect(Rect2(-8, -43 + bob, 16, 5), 2.2), sc)
+		ci.draw_line(Vector2(-7, -40.5 + bob), Vector2(7, -40.5 + bob), sc.darkened(0.25), 1.0, true)
+	# Front arm, to the weapon hand.
+	_arm(ci, Vector2(f * 6.0, -37 + bob), _u(origin + hand), false)
 	_draw_rim(ci, f, bob)
 	ci.draw_set_transform(Vector2.ZERO)
 
 ## The hand over the weapon grip (drawn after the weapon).
 func draw_hand(ci: CanvasItem, hand: Vector2, at := Vector2.ZERO, zoom := 1.0) -> void:
 	ci.draw_set_transform(at, 0.0, Vector2(U, U) * zoom)
-	ci.draw_circle(_u(origin + hand), 2.6, c("skin"))
+	_hand(ci, _u(origin + hand), float(facing), false)
 	ci.draw_set_transform(Vector2.ZERO)
 
 func _long_sleeves() -> bool:
 	return String(look.top) in ["jacket", "robe", "hoodie", "tunic"]
 
-func _limb(ci: CanvasItem, a: Vector2, b: Vector2, sleeve: Color, skin: Color, w: float, long_sleeve: bool) -> void:
-	var mid := a.lerp(b, 0.55 if not long_sleeve else 0.85)
-	ci.draw_line(a, mid, sleeve, w + 0.5)
-	ci.draw_line(mid, b, skin, w - 0.5)
-	ci.draw_circle(b, 2.4, skin)
+func _hand(ci: CanvasItem, p: Vector2, f: float, back: bool) -> void:
+	var skin := c("skin").darkened(0.12 if back else 0.0)
+	_shape(ci, _ellipse(p, 2.7, 2.5, 14), skin, 0.9)
+	ci.draw_circle(p + Vector2(f * 1.9, -1.1), 1.1, skin)
+	ci.draw_arc(p + Vector2(f * 1.9, -1.1), 1.1, 0, TAU, 8, _ol(skin), 0.7, true)
 
-func _shoe(ci: CanvasItem, foot: Vector2, f: float, shade: float) -> void:
-	var col := c("shoes_color").darkened(shade)
+func _arm(ci: CanvasItem, sh: Vector2, hand: Vector2, back: bool) -> void:
+	var f := float(facing)
+	var dim := 0.18 if back else 0.0
+	var sleeve := c("top_color").darkened(dim)
+	if String(look.top) == "vest":
+		sleeve = Color("#ecf0f1").darkened(dim)
+	var skin := c("skin").darkened(dim * 0.7)
+	var elbow := sh.lerp(hand, 0.5) + Vector2(-f * 0.8, 0.8)
+	if _long_sleeves():
+		_shape(ci, _capsule(sh, elbow, 3.2, 2.8), sleeve)
+		_shape(ci, _capsule(elbow, hand.lerp(elbow, 0.2), 2.8, 2.5), sleeve)
+		ci.draw_line(hand.lerp(elbow, 0.25) + Vector2(-2.4, 0), hand.lerp(elbow, 0.25) + Vector2(2.4, 0), sleeve.darkened(0.3), 1.0, true)
+	else:
+		_shape(ci, _capsule(sh, elbow, 2.6, 2.3), skin)
+		_shape(ci, _capsule(elbow, hand, 2.3, 2.1), skin)
+		# Short sleeve over the shoulder.
+		_shape(ci, _capsule(sh, sh.lerp(elbow, 0.55), 3.4, 3.0), sleeve)
+	if back:
+		_hand(ci, hand, f, true)
+
+func _leg(ci: CanvasItem, top: Vector2, knee: Vector2, foot: Vector2, f: float, back: bool) -> void:
+	var dim := 0.16 if back else 0.0
+	var bottom := String(look.bottom)
+	var pants := c("bottom_color").darkened(dim)
+	var skin := c("skin").darkened(dim * 0.8)
+	var thigh_col := pants if bottom in ["pants", "shorts"] else skin
+	var shin_col := pants if bottom == "pants" else skin
+	_shape(ci, _capsule(knee, foot + Vector2(0, -2.5), 2.7, 2.4), shin_col)
+	_shape(ci, _capsule(top, knee, 3.4, 2.8), thigh_col)
+	if bottom == "pants":
+		ci.draw_line(knee + Vector2(-f * 1.2, -1.5), knee + Vector2(f * 1.0, 1.0), pants.darkened(0.3), 0.8, true)
+	_shoe(ci, foot, f, dim)
+
+func _shoe(ci: CanvasItem, foot: Vector2, f: float, dim: float) -> void:
+	var col := c("shoes_color").darkened(dim)
 	match String(look.shoes):
 		"sandals":
-			ci.draw_rect(Rect2(foot.x - 3.5 + f * 1.0, foot.y - 1.0, 7.0, 2.0), col)
-			ci.draw_line(foot + Vector2(-1, -3), foot + Vector2(f * 2, -1), col, 1.0)
+			_shape(ci, _rrect(Rect2(foot.x - 4.0 + f * 1.0, foot.y - 1.6, 8.5, 1.8), 0.8), Color("#8b6238").darkened(dim))
+			ci.draw_circle(foot + Vector2(f * 3.0, -2.2), 1.6, c("skin").darkened(dim))
+			ci.draw_line(foot + Vector2(-1.5, -3.5), foot + Vector2(f * 2.5, -1.6), col, 1.2, true)
 		"sneakers":
-			ci.draw_rect(Rect2(foot.x - 3.5 + f * 1.5, foot.y - 3.0, 8.0, 3.0), col)
-			ci.draw_rect(Rect2(foot.x - 3.5 + f * 1.5, foot.y - 1.0, 8.0, 1.0), Color.WHITE)
+			_shape(ci, _rrect(Rect2(foot.x - 4.0 + f * 1.4, foot.y - 4.2, 9.0, 4.2), 1.8), col)
+			ci.draw_line(Vector2(foot.x - 3.6 + f * 1.4, foot.y - 0.8), Vector2(foot.x + 4.6 + f * 1.4, foot.y - 0.8), Color.WHITE, 1.4, true)
+			ci.draw_circle(foot + Vector2(f * 1.5, -3.4), 0.6, Color.WHITE)
 		_:
-			ci.draw_rect(Rect2(foot.x - 3.5 + f * 1.5, foot.y - 5.0, 8.0, 5.0), col)
-			ci.draw_rect(Rect2(foot.x - 3.5 + f * 1.5, foot.y - 1.0, 8.0, 1.0), col.darkened(0.35))
+			_shape(ci, _rrect(Rect2(foot.x - 4.0 + f * 1.4, foot.y - 6.0, 9.0, 6.0), 2.0), col)
+			ci.draw_line(Vector2(foot.x - 3.6 + f * 1.4, foot.y - 0.9), Vector2(foot.x + 4.6 + f * 1.4, foot.y - 0.9), col.darkened(0.45), 1.3, true)
+			ci.draw_line(Vector2(foot.x - 2.5 + f * 1.4, foot.y - 4.8), Vector2(foot.x + 3.0 + f * 1.4, foot.y - 4.8), col.lightened(0.3), 0.8, true)
 
-func _poly_from_chains(a: PackedVector2Array, b: PackedVector2Array) -> PackedVector2Array:
-	var poly := PackedVector2Array()
-	for p in a:
-		poly.append(_u(p))
-	for i in range(b.size() - 1, -1, -1):
-		poly.append(_u(b[i]))
-	return poly
+## Cloth between two physics chains, drawn as a strip of quads (one per segment). The chains can
+## cross when the cloth folds in the wind; a single polygon would then intersect itself and the
+## renderer can't fill it ("triangulation failed"). A quad strip just draws the fold.
+func _ribbon(ci: CanvasItem, a: PackedVector2Array, b: PackedVector2Array, col: Color, edge: Color) -> void:
+	var n := mini(a.size(), b.size())
+	var cols := PackedColorArray([col, col, col, col])
+	for i in n - 1:
+		ci.draw_primitive(PackedVector2Array([_u(a[i]), _u(a[i + 1]), _u(b[i + 1]), _u(b[i])]), cols, PackedVector2Array())
+	var la := PackedVector2Array()
+	var lb := PackedVector2Array()
+	for i in n:
+		la.append(_u(a[i]))
+		lb.append(_u(b[i]))
+	ci.draw_polyline(la, edge, OUTLINE, true)
+	ci.draw_polyline(lb, edge, OUTLINE, true)
+	ci.draw_line(la[n - 1], lb[n - 1], edge, OUTLINE, true)
 
 func _draw_cape(ci: CanvasItem, f: float) -> void:
 	if chains.has("cape_a"):
-		var poly := _poly_from_chains(chains.cape_a.pts, chains.cape_b.pts)
-		if poly.size() >= 3:
-			ci.draw_colored_polygon(poly, c("cape_color").darkened(0.15))
-			ci.draw_polyline(poly, c("cape_color").darkened(0.4), 1.0)
+		var cc := c("cape_color")
+		_ribbon(ci, chains.cape_a.pts, chains.cape_b.pts, cc.darkened(0.12), _ol(cc))
+		# Lining glimpse along the trailing edge.
+		var la := PackedVector2Array()
+		for p in chains.cape_a.pts:
+			la.append(_u(p) + Vector2(f * 0.8, 0))
+		ci.draw_polyline(la, cc.darkened(0.4), 1.2, true)
 	if chains.has("scarf"):
-		var line := PackedVector2Array()
-		for p in chains.scarf.pts:
-			line.append(_u(p))
-		ci.draw_polyline(line, c("cape_color"), 4.0)
-		ci.draw_polyline(line, c("cape_color").darkened(0.3), 1.0)
+		_strand(ci, chains.scarf.pts, 4.5, c("cape_color"))
 
+## A physics lock of hair (or a tail): outline pass, fill pass tapering toward the tip, then a shine line.
 func _strand(ci: CanvasItem, pts: PackedVector2Array, w0: float, col: Color) -> void:
-	for i in range(1, pts.size()):
-		var w := lerpf(w0, w0 * 0.35, float(i) / pts.size())
-		ci.draw_line(_u(pts[i - 1]), _u(pts[i]), col, w)
-		ci.draw_circle(_u(pts[i]), w * 0.5, col)
+	var n := pts.size()
+	for pass_i in 2:
+		for i in range(1, n):
+			var w := lerpf(w0, w0 * 0.3, float(i) / n) + (1.6 if pass_i == 0 else 0.0)
+			var a := _u(pts[i - 1])
+			var b := _u(pts[i])
+			ci.draw_line(a, b, _ol(col) if pass_i == 0 else col, w, true)
+			ci.draw_circle(b, w * 0.5, _ol(col) if pass_i == 0 else col)
+	var shine := PackedVector2Array()
+	for i in mini(n, 4):
+		shine.append(_u(pts[i]) + Vector2(-float(facing) * w0 * 0.15, 0))
+	if shine.size() >= 2:
+		ci.draw_polyline(shine, col.lightened(0.3), maxf(w0 * 0.22, 0.8), true)
 
-func _draw_back_hair(ci: CanvasItem, f: float) -> void:
-	var hc := c("hair_color")
-	for name in ["hair_a", "hair_b"]:
-		if chains.has(name) and not _front_chain(name):
-			var w := 9.0 if String(look.hair) == "long" else 6.0
-			_strand(ci, chains[name].pts, w + 1.5, hc.darkened(0.35))
-			_strand(ci, chains[name].pts, w, hc.darkened(0.08))
+func _draw_back_hair(ci: CanvasItem, f: float, bob: float) -> void:
+	var hc_col := c("hair_color").darkened(0.12)
+	var hc := _hc(f, bob)
 	match String(look.hair):
 		"long":
-			ci.draw_rect(Rect2(-f * 13.0 - (0.0 if f > 0 else 0.0) - 3.0, -58, 8, 18), hc.darkened(0.1))
+			_shape(ci, _rrect(Rect2(hc.x - f * 9.0 - 7.0, hc.y - 6.0, 14, 24), 6.0), hc_col)
 		"bob":
-			ci.draw_rect(Rect2(-14, -56, 28, 16), hc.darkened(0.1))
+			_shape(ci, _rrect(Rect2(hc.x - 15.5, hc.y - 8.0, 31, 20), 7.0), hc_col)
+	for name in ["hair_a", "hair_b"]:
+		if chains.has(name) and not _front_chain(name):
+			_strand(ci, chains[name].pts, 9.5 if String(look.hair) == "long" else 6.5, hc_col)
 
 ## Tails that hang on the near side of the head are drawn over it, not behind.
 func _front_chain(name: String) -> bool:
@@ -318,196 +433,295 @@ func _front_chain(name: String) -> bool:
 func _draw_skirt(ci: CanvasItem, f: float, bob: float) -> void:
 	if not chains.has("hem_a"):
 		if String(look.bottom) == "shorts":
-			ci.draw_rect(Rect2(-8, -21 + bob * 0.3, 16, 7), c("bottom_color"))
+			var pc := c("bottom_color")
+			_shape(ci, _rrect(Rect2(-8.5, -24 + bob * 0.3, 17, 8), 2.5), pc)
+			ci.draw_line(Vector2(0, -20 + bob * 0.3), Vector2(0, -16.5 + bob * 0.3), pc.darkened(0.35), 0.8, true)
 		return
 	var col := c("top_color") if String(look.top) == "robe" else c("bottom_color")
 	var a: PackedVector2Array = chains.hem_a.pts
 	var b: PackedVector2Array = chains.hem_b.pts
-	var poly := PackedVector2Array()
-	for p in a:
-		poly.append(_u(p))
-	for i in range(b.size() - 1, -1, -1):
-		poly.append(_u(b[i]))
-	ci.draw_colored_polygon(poly, col)
-	ci.draw_line(_u(a[a.size() - 1]), _u(b[b.size() - 1]), col.darkened(0.3), 1.5)
+	_ribbon(ci, a, b, col, _ol(col))
+	# Pleats
+	for k in [0.3, 0.55, 0.8]:
+		var top := _u(a[0]).lerp(_u(b[0]), k)
+		var bottom := _u(a[a.size() - 1]).lerp(_u(b[b.size() - 1]), k)
+		ci.draw_line(top, bottom, col.darkened(0.2), 0.8, true)
 	if String(look.top) == "robe":
-		ci.draw_line(_u(a[a.size() - 1]), _u(b[b.size() - 1]), Color("#e8c34a"), 1.0)
+		ci.draw_line(_u(a[a.size() - 1]), _u(b[b.size() - 1]), Color("#e8c34a"), 1.2, true)
 
 func _draw_torso(ci: CanvasItem, f: float, bob: float) -> void:
 	var col := c("top_color")
-	var y0 := -39.0 + bob
-	var body := PackedVector2Array([Vector2(-8, y0), Vector2(8, y0), Vector2(9, -19 + bob * 0.3), Vector2(-9, -19 + bob * 0.3)])
-	match String(look.top):
-		"vest":
-			ci.draw_colored_polygon(body, Color("#ecf0f1"))
-			ci.draw_colored_polygon(PackedVector2Array([Vector2(-8, y0), Vector2(-1 * f, y0), Vector2(1 * f, -19), Vector2(-9, -19)]) if f > 0 else PackedVector2Array([Vector2(1, y0), Vector2(8, y0), Vector2(9, -19), Vector2(-1, -19)]), col)
-			ci.draw_colored_polygon(PackedVector2Array([Vector2(f * 3, y0), Vector2(f * 8, y0), Vector2(f * 9, -19), Vector2(f * 5, -19)]), col)
-			for k in 3:
-				ci.draw_circle(Vector2(f * 4.0, y0 + 5 + k * 5), 0.8, Color("#e8c34a"))
-		_:
-			ci.draw_colored_polygon(body, col)
-	ci.draw_line(Vector2(-f * 8.0, y0 + 1), Vector2(-f * 9.0, -20), col.darkened(0.2), 2.0)
-	match String(look.top):
+	var y0 := -41.0 + bob
+	var r := Rect2(-8.6, y0, 17.2, 21.5 - bob * 0.7)
+	var body := _rrect(r, 4.0)
+	# Shadow band on the back side.
+	var back_x := -f * 8.6
+	var shade := _rrect(Rect2(minf(back_x, back_x + f * 5.0), y0 + 1.0, 5.0, r.size.y - 2.0), 3.0)
+	var top := String(look.top)
+	if top == "vest":
+		_shaded(ci, body, Color("#ecf0f1"), shade)
+		# Vest panels with buttons.
+		_shape(ci, _rrect(Rect2(-8.6, y0, 7.0, r.size.y), 3.0), col)
+		_shape(ci, _rrect(Rect2(1.6, y0, 7.0, r.size.y), 3.0), col)
+		for k in 3:
+			ci.draw_circle(Vector2(f * 2.6, y0 + 5 + k * 5), 0.9, Color("#e8c34a"))
+		return
+	_shaded(ci, body, col, shade)
+	var line := col.darkened(0.35)
+	match top:
 		"tee":
-			ci.draw_line(Vector2(f * 0.5 - 3, y0 + 0.5), Vector2(f * 0.5 + 3, y0 + 0.5), col.darkened(0.3), 1.0)
+			ci.draw_arc(Vector2(f * 1.0, y0 - 0.5), 3.5, 0.2, PI - 0.2, 10, line, 1.0, true)
+			ci.draw_line(Vector2(f * 0.5, y0 + 9), Vector2(f * 3.5, y0 + 14), col.lightened(0.15), 0.8, true)
 		"tunic":
-			ci.draw_rect(Rect2(-9, -24 + bob * 0.5, 18, 3), Color("#4a3426"))
-			ci.draw_rect(Rect2(f * 2 - 1.5, -24 + bob * 0.5, 3, 3), Color("#e8c34a"))
-			ci.draw_rect(Rect2(-9.5, -21 + bob * 0.3, 19, 4), col.darkened(0.1))
+			_shape(ci, _rrect(Rect2(-8.8, -26 + bob * 0.5, 17.6, 3.2), 1.0), Color("#5a3a24"))
+			_shape(ci, _rrect(Rect2(f * 2.0 - 2.0, -26.5 + bob * 0.5, 4.0, 4.0), 0.8), Color("#e8c34a"))
+			ci.draw_line(Vector2(f * 1.5, y0), Vector2(f * 1.5, -27 + bob * 0.5), line, 0.9, true)
+			ci.draw_arc(Vector2(f * 1.0, y0 - 0.5), 3.8, 0.2, PI - 0.2, 10, Color("#e8c34a"), 1.0, true)
 		"jacket":
-			ci.draw_rect(Rect2(f * 3 - 1.5, y0, 3, 20), Color("#ecf0f1"))
-			ci.draw_line(Vector2(f * 1.5, y0), Vector2(f * 3.5, y0 + 7), col.darkened(0.35), 1.0)
-			ci.draw_line(Vector2(f * 4.5, y0), Vector2(f * 2.5, y0 + 7), col.darkened(0.35), 1.0)
+			_shape(ci, _rrect(Rect2(f * 2.8 - 2.2, y0, 4.4, r.size.y - 1.0), 1.5), Color("#ecf0f1"))
+			ci.draw_line(Vector2(f * 0.6, y0), Vector2(f * 3.2, y0 + 8), line, 1.2, true)
+			ci.draw_line(Vector2(f * 5.0, y0), Vector2(f * 2.4, y0 + 8), line, 1.2, true)
+			ci.draw_line(Vector2(-f * 3.5, y0 + 12), Vector2(-f * 0.5, y0 + 12), line, 0.8, true)
 		"robe":
-			ci.draw_line(Vector2(f * 2, y0), Vector2(f * 2, -19), Color("#e8c34a"), 1.0)
-			ci.draw_rect(Rect2(-9, -25 + bob * 0.5, 18, 2), Color("#e8c34a"))
+			ci.draw_line(Vector2(f * 2.0, y0), Vector2(f * 2.0, -20 + bob * 0.3), Color("#e8c34a"), 1.3, true)
+			_shape(ci, _rrect(Rect2(-8.8, -27 + bob * 0.5, 17.6, 2.6), 1.0), Color("#e8c34a"))
+			ci.draw_arc(Vector2(f * 1.0, y0 - 0.5), 4.0, 0.2, PI - 0.2, 10, Color("#e8c34a"), 1.2, true)
 		"hoodie":
-			ci.draw_circle(Vector2(-f * 6.0, y0 + 1), 5.5, col.darkened(0.15))
-			ci.draw_rect(Rect2(f * 1 - 4, -28 + bob * 0.5, 8, 5), col.darkened(0.15))
-			ci.draw_line(Vector2(f * 2, y0 + 1), Vector2(f * 2, y0 + 7), Color("#ecf0f1"), 0.8)
-			ci.draw_line(Vector2(f * 5, y0 + 1), Vector2(f * 5, y0 + 7), Color("#ecf0f1"), 0.8)
+			_shape(ci, _ellipse(Vector2(-f * 5.5, y0 + 1.0), 6.0, 4.0, 18), col.darkened(0.12))
+			_shape(ci, _rrect(Rect2(f * 1.0 - 4.5, -30 + bob * 0.5, 9.0, 5.0), 2.0), col.darkened(0.1))
+			ci.draw_line(Vector2(f * 2.0, y0 + 1), Vector2(f * 2.2, y0 + 8), Color("#ecf0f1"), 0.9, true)
+			ci.draw_line(Vector2(f * 5.0, y0 + 1), Vector2(f * 5.2, y0 + 8), Color("#ecf0f1"), 0.9, true)
+	# Highlight along the front edge.
+	ci.draw_line(Vector2(f * 7.2, y0 + 3), Vector2(f * 7.4, y0 + r.size.y - 4), col.lightened(0.25), 1.0, true)
 
 func _draw_head(ci: CanvasItem, f: float, bob: float) -> void:
 	var skin := c("skin")
-	var hc := Vector2(f * 1.0, -51 + bob)
-	ci.draw_rect(Rect2(-2.5, -42 + bob, 5, 4), skin.darkened(0.12))
-	ci.draw_circle(hc, 14.0, skin)
-	ci.draw_circle(hc + Vector2(-f * 9.5, 2), 2.8, skin.darkened(0.08))
-	# Face, 3/4 view toward facing.
-	var near := hc + Vector2(f * 6.5, 1)
-	var far := hc + Vector2(f * -1.0, 1)
+	var hc := _hc(f, bob)
+	# Neck with a shadow under the chin.
+	_shape(ci, _rrect(Rect2(-2.8, -43 + bob, 5.6, 5), 1.5), skin.darkened(0.15), 0.9)
+	# Ear on the back side.
+	var ear := hc + Vector2(-f * 12.8, 1.5)
+	_shape(ci, _ellipse(ear, 2.6, 3.4, 14), skin)
+	ci.draw_arc(ear, 1.3, 0, TAU, 10, skin.darkened(0.25), 0.9, true)
+	# Head: round with a soft chin toward the facing side.
+	var head := _ellipse(hc, HEAD_R - 0.5, HEAD_R - 1.2, 36)
+	for k in head.size():
+		var p: Vector2 = head[k]
+		if p.y > hc.y + 6.0:
+			head[k] = p + Vector2(f * 1.2 * (p.y - hc.y - 6.0) / 8.0, 0)
+	ci.draw_colored_polygon(head, skin)
+	# Shadow on the back of the face.
+	ci.draw_colored_polygon(_ellipse(hc + Vector2(-f * 8.5, 2), 5.5, 10.0, 18), skin.darkened(0.08))
+	var closed := head.duplicate()
+	closed.append(head[0])
+	ci.draw_polyline(closed, _ol(skin), OUTLINE, true)
+	_draw_face(ci, f, hc)
+
+func _draw_face(ci: CanvasItem, f: float, hc: Vector2) -> void:
 	var face := String(look.face)
 	var eye := c("eye_color")
-	var big := 1.25 if face == "bright" else 1.0
-	for e in [[far, 0.85], [near, 1.0]]:
+	var big := 1.15 if face == "bright" else 1.0
+	var near := hc + Vector2(f * 6.0, 2.5)
+	var far := hc + Vector2(-f * 2.2, 2.5)
+	var lash := Color("#1e1a24")
+	for e in [[far, 0.82], [near, 1.0]]:
 		var p: Vector2 = e[0]
 		var s: float = e[1] * big
+		var rx := 2.9 * s
+		var ry := 3.9 * s * (0.85 if face == "fierce" else 1.0)
 		if face == "cheery":
-			ci.draw_arc(p + Vector2(0, 1), 2.4 * s, PI + 0.3, TAU - 0.3, 6, Color("#2a2a3a"), 1.3)
+			ci.draw_arc(p + Vector2(0, 1.5), rx, PI + 0.35, TAU - 0.35, 10, lash, 1.5, true)
 			continue
 		if is_blinking():
-			ci.draw_line(p + Vector2(-2.4 * s, 0.5), p + Vector2(2.4 * s, 0.5), Color("#2a2a3a"), 1.2)
+			ci.draw_arc(p + Vector2(0, -1.0), rx, 0.35, PI - 0.35, 10, lash, 1.4, true)
 			continue
-		ci.draw_rect(Rect2(p.x - 2.6 * s, p.y - 3.4 * s, 5.2 * s, 6.4 * s), Color.WHITE)
-		ci.draw_rect(Rect2(p.x - 1.6 * s + f * 0.8, p.y - 2.6 * s, 3.4 * s, 5.4 * s), eye)
-		ci.draw_rect(Rect2(p.x - 0.7 * s + f * 1.0, p.y - 1.2 * s, 1.6 * s, 2.6 * s), Color("#141414"))
-		ci.draw_rect(Rect2(p.x - 1.4 * s + f * 0.6, p.y - 2.4 * s, 1.2, 1.2), Color(1, 1, 1, 0.95))
+		# White, two-tone iris, pupil, catch-lights.
+		ci.draw_colored_polygon(_ellipse(p, rx, ry, 18), Color.WHITE)
+		var ic := p + Vector2(f * 0.6, 0.4)
+		ci.draw_colored_polygon(_ellipse(ic, rx * 0.74, ry * 0.8, 16), eye.darkened(0.35))
+		ci.draw_colored_polygon(_ellipse(ic + Vector2(0, ry * 0.25), rx * 0.62, ry * 0.5, 14), eye.lightened(0.15))
+		ci.draw_colored_polygon(_ellipse(ic + Vector2(0, 0.2), rx * 0.32, ry * 0.42, 10), Color("#101014"))
+		ci.draw_circle(ic + Vector2(-f * rx * 0.25 + rx * 0.1, -ry * 0.35), 1.0 * s, Color(1, 1, 1, 0.95))
+		ci.draw_circle(ic + Vector2(f * rx * 0.3, ry * 0.35), 0.5 * s, Color(1, 1, 1, 0.8))
+		if face == "bright":
+			ci.draw_circle(ic + Vector2(-f * rx * 0.1, ry * 0.05), 0.45, Color(1, 1, 1, 0.7))
+		# Upper lash line with a flick at the outer corner, lower lid.
+		var top := PackedVector2Array()
+		for k in 9:
+			var a := PI + PI * k / 8.0
+			top.append(p + Vector2(cos(a) * rx * 1.05, sin(a) * ry * 1.02))
+		ci.draw_polyline(top, lash, 1.5, true)
+		var outer := p + Vector2(f * rx * 1.05, -ry * 0.1)
+		ci.draw_line(outer, outer + Vector2(f * 1.4, -1.2), lash, 1.1, true)
+		ci.draw_arc(p, rx * 0.85, 0.5, PI - 0.5, 8, Color(0.45, 0.3, 0.28, 0.6), 0.7, true)
 		if face == "sleepy":
-			ci.draw_rect(Rect2(p.x - 2.8 * s, p.y - 3.6 * s, 5.6 * s, 3.0 * s), c("skin"))
-			ci.draw_line(p + Vector2(-2.8 * s, -0.6 * s), p + Vector2(2.8 * s, -0.6 * s), Color("#2a2a3a"), 1.0)
-		else:
-			ci.draw_line(p + Vector2(-2.6 * s, -3.4 * s), p + Vector2(2.6 * s, -3.4 * s), Color("#2a2a3a"), 1.0)
+			ci.draw_colored_polygon(_rrect(Rect2(p.x - rx * 1.1, p.y - ry * 1.15, rx * 2.2, ry * 1.0), 1.0), c("skin"))
+			ci.draw_line(p + Vector2(-rx * 1.05, -ry * 0.18), p + Vector2(rx * 1.05, -ry * 0.18), lash, 1.4, true)
 	# Brows
-	var brow := c("hair_color").darkened(0.2)
+	var brow := c("hair_color").darkened(0.25)
 	if face == "fierce":
-		ci.draw_line(far + Vector2(-2.5, -6), far + Vector2(2.5, -4.5), brow, 1.3)
-		ci.draw_line(near + Vector2(2.5, -6), near + Vector2(-2.5, -4.5), brow, 1.3)
+		ci.draw_line(far + Vector2(-2.6, -6.6), far + Vector2(2.4, -5.0), brow, 1.4, true)
+		ci.draw_line(near + Vector2(2.8, -6.8), near + Vector2(-2.6, -5.0), brow, 1.4, true)
 	else:
-		ci.draw_line(far + Vector2(-2.2, -5.5), far + Vector2(2.2, -5.8), brow, 1.0)
-		ci.draw_line(near + Vector2(-2.2, -5.8), near + Vector2(2.2, -5.5), brow, 1.0)
-	# Mouth and blush
-	var mouth := hc + Vector2(f * 3.5, 8.5)
+		ci.draw_arc(far + Vector2(0, -3.5), 3.0, PI + 0.6, TAU - 0.6, 8, brow, 1.1, true)
+		ci.draw_arc(near + Vector2(0, -3.8), 3.2, PI + 0.6, TAU - 0.6, 8, brow, 1.1, true)
+	# Nose and mouth
+	var skin := c("skin")
+	ci.draw_line(hc + Vector2(f * 8.5, 6.5), hc + Vector2(f * 9.2, 7.5), skin.darkened(0.3), 0.9, true)
+	var mouth := hc + Vector2(f * 4.5, 10.2)
 	match face:
 		"bright", "cheery":
-			ci.draw_arc(mouth, 1.8, 0.2, PI - 0.2, 6, Color("#8a3a3a"), 1.2)
-			ci.draw_circle(near + Vector2(f * 1.5, 4.5), 1.6, Color(1.0, 0.5, 0.55, 0.45))
-			ci.draw_circle(far + Vector2(-f * 1.0, 4.5), 1.4, Color(1.0, 0.5, 0.55, 0.35))
+			ci.draw_colored_polygon(_ellipse(mouth + Vector2(0, 0.4), 1.9, 1.3, 12).slice(0, 7) + PackedVector2Array([mouth + Vector2(-1.9, 0.4)]), Color("#8a2a3a"))
+			ci.draw_circle(mouth + Vector2(0, 1.0), 0.7, Color("#ff8a9a"))
+			ci.draw_colored_polygon(_ellipse(near + Vector2(f * 1.2, 5.3), 2.2, 1.1, 12), Color(1.0, 0.5, 0.55, 0.45))
+			ci.draw_colored_polygon(_ellipse(far + Vector2(-f * 0.8, 5.3), 1.8, 1.0, 12), Color(1.0, 0.5, 0.55, 0.35))
 		"fierce":
-			ci.draw_line(mouth + Vector2(-1.8, 0), mouth + Vector2(1.8, -0.4), Color("#5a2a2a"), 1.0)
+			ci.draw_line(mouth + Vector2(-1.8, 0.3), mouth + Vector2(1.8, -0.3), Color("#5a2a2a"), 1.0, true)
+		"sleepy":
+			ci.draw_arc(mouth, 1.0, 0, TAU, 8, Color("#7a3a3a"), 0.9, true)
 		_:
-			ci.draw_line(mouth + Vector2(-1.4, 0), mouth + Vector2(1.4, 0), Color("#7a3a3a"), 1.0)
+			ci.draw_arc(mouth + Vector2(0, -1.2), 1.8, 0.4, PI - 0.4, 8, Color("#7a3a3a"), 1.0, true)
 
-func _hair_cap(ci: CanvasItem, hc: Vector2, col: Color, low := 0.25) -> void:
-	var pts := PackedVector2Array()
-	for k in 13:
-		var a := PI + low - (PI + 2.0 * low) * (1.0 - float(k) / 12.0)
-		a = lerpf(PI + low, TAU - low, float(k) / 12.0)
-		pts.append(hc + Vector2(cos(a), sin(a)) * 15.2)
-	pts.append(hc + Vector2(14.0, -2))
-	pts.append(hc + Vector2(-14.0, -2))
-	ci.draw_colored_polygon(pts, col)
+## Hair cap: covers the top and back of the head, down to the forehead on the face side.
+func _cap_poly(hc: Vector2, f: float, r: float) -> PackedVector2Array:
+	# From just above center on the back side, over the top, to the hairline on the face side,
+	# so the edge never crosses the eyes.
+	var back := asin(1.0 / r)
+	var front := asin(6.0 / r)
+	var a0 := PI + (back if f > 0 else front)
+	var a1 := TAU - (front if f > 0 else back)
+	var p := PackedVector2Array()
+	for k in 25:
+		var a := lerpf(a0, a1, float(k) / 24.0)
+		p.append(hc + Vector2(cos(a) * r, sin(a) * r * 0.98))
+	# Convex on purpose: the nape is its own shape (see _draw_front_hair), so this always fills.
+	return p
+
+## A pointed lock: base from a to b, tip at `tip`, sides bowed out a little.
+func _lock(ci: CanvasItem, a: Vector2, b: Vector2, tip: Vector2, col: Color) -> void:
+	var mid := (a + b) / 2.0
+	var bow := (tip - mid).orthogonal().normalized() * 0.8
+	var poly := PackedVector2Array([a, a.lerp(tip, 0.5) - bow, tip, b.lerp(tip, 0.5) + bow, b])
+	_shape(ci, poly, col, 0.9)
 
 func _draw_front_hair(ci: CanvasItem, f: float, bob: float) -> void:
 	var col := c("hair_color")
-	var hc := Vector2(f * 1.0, -51 + bob)
+	var hc := _hc(f, bob)
 	var style := String(look.hair)
-	_hair_cap(ci, hc + Vector2(0, -0.5), col, 0.15)
-	# Back of the head is covered by hair for every style (kept clear of the far eye).
-	ci.draw_circle(hc + Vector2(-f * 9.0, -4), 8.0, col)
-	ci.draw_rect(Rect2(hc.x - f * 14.0 - (0.0 if f > 0 else 0.0) - (0.0 if f > 0 else -0.0) - 2.5, hc.y - 6, 6, 12), col)
+	# Hair down the back of the head to the nape, then the cap over the top.
+	_shape(ci, _capsule(hc + Vector2(-f * 10.0, -3.0), hc + Vector2(-f * 8.5, 8.5), 6.0, 4.0), col)
+	var cap := _cap_poly(hc, f, HEAD_R + 0.8)
+	_shape(ci, cap, col)
+	# Underlayer shadow near the nape.
+	ci.draw_colored_polygon(_ellipse(hc + Vector2(-f * 9.0, 2.0), 5.0, 6.0, 14), col.darkened(0.15))
 	match style:
 		"spiky":
-			for k in 5:
-				var x := -12.0 + k * 5.5
-				var tip := Vector2(x * f + f * (-3.0 + k * 0.5), -71 + bob + absf(k - 2) * 2.0)
-				ci.draw_colored_polygon(PackedVector2Array([hc + Vector2(x * f - 3, -10), tip, hc + Vector2(x * f + 3, -10)]), col)
-		"messy":
 			for k in 6:
-				var x := -13.0 + k * 5.0
-				ci.draw_colored_polygon(PackedVector2Array([hc + Vector2(x * f, -10), hc + Vector2(x * f - f * 4, -17 - (k % 2) * 2), hc + Vector2(x * f + f * 4, -11)]), col)
-		"swept":
-			ci.draw_colored_polygon(PackedVector2Array([hc + Vector2(-f * 10, -12), hc + Vector2(f * 16, -9), hc + Vector2(f * 11, -1), hc + Vector2(f * 2, -6)]), col)
-		"bowl":
-			ci.draw_rect(Rect2(hc.x - 15, hc.y - 6, 30, 4), col)
+				var ang := lerpf(-2.6, -0.4, float(k) / 5.0)
+				if f < 0:
+					ang = -PI - ang
+				var base := hc + Vector2(cos(ang), sin(ang)) * (HEAD_R - 1.0)
+				var tip := hc + Vector2(cos(ang - f * 0.25), sin(ang - f * 0.25)) * (HEAD_R + 8.0 + (k % 2) * 3.0)
+				var side := Vector2(cos(ang), sin(ang)).orthogonal() * 3.2
+				_lock(ci, base - side, base + side, tip, col)
+		"messy":
+			for k in 7:
+				var ang := lerpf(-2.8, -0.3, float(k) / 6.0)
+				var base := hc + Vector2(cos(ang), sin(ang)) * (HEAD_R - 0.5)
+				var tip := base + Vector2(cos(ang + (0.5 if k % 2 else -0.5)), sin(ang + (0.5 if k % 2 else -0.5))) * 5.5
+				var side := Vector2(cos(ang), sin(ang)).orthogonal() * 2.6
+				_lock(ci, base - side, base + side, tip, col)
 		"bun":
-			ci.draw_circle(hc + Vector2(-f * 7.0, -14), 6.0, col)
-			ci.draw_circle(hc + Vector2(-f * 7.0, -14), 6.0, col.darkened(0.25))
-			ci.draw_circle(hc + Vector2(-f * 7.0, -15), 4.5, col)
+			var bp := hc + Vector2(-f * 7.0, -15.0)
+			_shape(ci, _ellipse(bp, 6.5, 6.0, 20), col)
+			ci.draw_arc(bp, 4.0, PI * 1.1, PI * 1.6, 6, col.lightened(0.3), 1.2, true)
 		"bob":
-			ci.draw_rect(Rect2(hc.x + f * 7.0 - 3.0, hc.y - 5, 6, 12), col)
-	if style in ["long", "ponytail", "twintails", "side_tail", "long_tied", "bob", "bun", "short"]:
-		# Bangs: a zigzag fringe over the forehead.
-		var fringe := PackedVector2Array([hc + Vector2(-f * 4, -12)])
-		for k in 5:
-			fringe.append(hc + Vector2(f * (-2 + k * 3.5), -5 - (k % 2) * 3))
-		fringe.append(hc + Vector2(f * 15, -8))
-		fringe.append(hc + Vector2(f * 12, -14))
-		ci.draw_colored_polygon(fringe, col)
-	if style == "twintails" or style == "side_tail" or style == "ponytail":
-		var tie_name := "hair_a"
-		if chains.has(tie_name):
-			ci.draw_circle(_u(chains[tie_name].pts[0]), 2.2, Color("#e86aa0"))
+			_shape(ci, _rrect(Rect2(hc.x + f * 9.0 - 3.5, hc.y - 4.0, 7.0, 14.0), 3.0), col)
+		"long":
+			_shape(ci, _capsule(hc + Vector2(f * 12.6, -3.0), hc + Vector2(f * 13.4, 13.0), 3.0, 2.0), col)
+		"bowl":
+			_shape(ci, _rrect(Rect2(hc.x - HEAD_R - 0.8, hc.y - 7.0, (HEAD_R + 0.8) * 2.0, 5.0), 2.0), col)
+	# Bangs over the forehead, lock by lock.
+	if style == "swept":
+		_lock(ci, hc + Vector2(-f * 8.0, -12.0), hc + Vector2(f * 4.0, -13.0), hc + Vector2(f * 17.0, -6.0), col)
+		_lock(ci, hc + Vector2(f * 2.0, -11.0), hc + Vector2(f * 10.0, -10.0), hc + Vector2(f * 15.0, -4.5), col)
+	elif style != "bowl":
+		var n := 5 if style != "spiky" else 4
+		for k in n:
+			var x0 := -2.0 + k * 3.6
+			var x1 := x0 + 4.6
+			var drop := 4.5 + (k % 2) * 1.6 + (1.0 if k == n - 1 else 0.0)  # tips stop above the eyes
+			_lock(ci, hc + Vector2(f * x0, -13.0 + absf(x0) * 0.1), hc + Vector2(f * x1, -12.0 + x1 * 0.15), hc + Vector2(f * (x0 + 3.2), -12.0 + drop), col)
+	# Sideburn by the ear.
+	_shape(ci, _capsule(hc + Vector2(-f * 11.0, -2.0), hc + Vector2(-f * 10.5, 6.0), 2.4, 1.4), col)
 	for name in ["hair_a", "hair_b"]:
 		if chains.has(name) and _front_chain(name):
-			_strand(ci, chains[name].pts, 7.5, col.darkened(0.35))
-			_strand(ci, chains[name].pts, 6.0, col.darkened(0.05))
-	# Shine
-	ci.draw_arc(hc + Vector2(-f * 2, -6), 9.0, -PI * 0.85, -PI * 0.55, 6, col.lightened(0.35), 1.5)
+			_strand(ci, chains[name].pts, 6.5, col)
+	if style in ["twintails", "side_tail", "ponytail"] and chains.has("hair_a"):
+		var tie := _u(chains.hair_a.pts[0])
+		_shape(ci, _ellipse(tie, 2.4, 2.0, 12), Color("#e86aa0"), 0.8)
+		if style == "twintails" and chains.has("hair_b"):
+			_shape(ci, _ellipse(_u(chains.hair_b.pts[0]), 2.4, 2.0, 12), Color("#e86aa0"), 0.8)
+	# Strand lines and the anime shine band.
+	for k in 3:
+		var a0 := PI + 0.6 + k * 0.5
+		ci.draw_arc(hc + Vector2(-f * 2.0, 3.0), HEAD_R - 3.0 - k * 1.5, a0, a0 + 0.6, 6, col.darkened(0.25), 0.7, true)
+	ci.draw_arc(hc + Vector2(-f * 1.0, 1.0), HEAD_R - 4.5, PI * 1.18, PI * 1.5, 10, col.lightened(0.45), 2.0, true)
+	ci.draw_arc(hc + Vector2(-f * 1.0, 1.0), HEAD_R - 4.5, PI * 1.56, PI * 1.62, 3, col.lightened(0.45), 2.0, true)
 
 func _draw_hat(ci: CanvasItem, f: float, bob: float) -> void:
 	var col := c("hat_color")
-	var hc := Vector2(f * 1.0, -51 + bob)
+	var hc := _hc(f, bob)
 	match String(look.hat):
 		"beanie":
-			_hair_cap(ci, hc + Vector2(0, -2), col, -0.05)
-			ci.draw_rect(Rect2(hc.x - 15, hc.y - 9, 30, 4), col.darkened(0.2))
-			ci.draw_circle(hc + Vector2(0, -18), 2.5, col.lightened(0.3))
+			var dome := PackedVector2Array()
+			for k in 17:
+				var a := lerpf(PI, TAU, float(k) / 16.0)
+				dome.append(hc + Vector2(cos(a) * (HEAD_R + 1.5), sin(a) * (HEAD_R + 0.5) - 3.0))
+			_shape(ci, dome, col)
+			_shape(ci, _rrect(Rect2(hc.x - HEAD_R - 1.5, hc.y - 7.0, (HEAD_R + 1.5) * 2.0, 4.5), 2.0), col.darkened(0.2))
+			_shape(ci, _ellipse(hc + Vector2(0, -HEAD_R - 2.0), 3.0, 2.8, 12), col.lightened(0.3))
 		"bandana":
-			ci.draw_rect(Rect2(hc.x - 15, hc.y - 10, 30, 4), col)
+			_shape(ci, _rrect(Rect2(hc.x - HEAD_R - 0.8, hc.y - 11.0, (HEAD_R + 0.8) * 2.0, 4.5), 1.5), col)
+			for k in 3:
+				ci.draw_circle(hc + Vector2(f * (-6.0 + k * 5.0), -8.8), 0.7, Color(1, 1, 1, 0.7))
 			if chains.has("hat_tail"):
-				_strand(ci, chains.hat_tail.pts, 3.0, col.darkened(0.15))
+				_strand(ci, chains.hat_tail.pts, 3.4, col.darkened(0.1))
 		"cap":
-			_hair_cap(ci, hc + Vector2(0, -3), col, 0.1)
-			ci.draw_colored_polygon(PackedVector2Array([hc + Vector2(f * 6, -8), hc + Vector2(f * 22, -6), hc + Vector2(f * 20, -4), hc + Vector2(f * 6, -5)]), col.darkened(0.25))
+			var dome := PackedVector2Array()
+			for k in 17:
+				var a := lerpf(PI, TAU, float(k) / 16.0)
+				dome.append(hc + Vector2(cos(a) * (HEAD_R + 1.0), sin(a) * (HEAD_R - 1.0) - 3.0))
+			_shape(ci, dome, col)
+			_shape(ci, PackedVector2Array([hc + Vector2(f * 6, -4), hc + Vector2(f * 23, -3), hc + Vector2(f * 22, -0.5), hc + Vector2(f * 6, -1.5)]), col.darkened(0.25), 0.9)
+			ci.draw_circle(hc + Vector2(0, -HEAD_R - 3.5), 1.2, col.darkened(0.3))
 		"wizard":
-			ci.draw_colored_polygon(PackedVector2Array([hc + Vector2(-18, -9), hc + Vector2(18, -9), hc + Vector2(16, -6), hc + Vector2(-16, -6)]), col.darkened(0.2))
-			var tip := _u(chains.hat_tip.pts[0]) if chains.has("hat_tip") else hc + Vector2(-f * 3, -30)
-			ci.draw_colored_polygon(PackedVector2Array([hc + Vector2(-11, -9), tip, hc + Vector2(11, -9)]), col)
+			_shape(ci, _ellipse(hc + Vector2(0, -9.0), 20.0, 3.6, 28), col.darkened(0.2))
+			var tip := _u(chains.hat_tip.pts[0]) if chains.has("hat_tip") else hc + Vector2(-f * 3, -32)
+			_shape(ci, PackedVector2Array([hc + Vector2(-11.5, -9.5), hc.lerp(tip, 0.55) + Vector2(-4.0, 0), tip, hc.lerp(tip, 0.55) + Vector2(4.0, 0), hc + Vector2(11.5, -9.5)]), col)
 			if chains.has("hat_tip"):
-				_strand(ci, chains.hat_tip.pts, 4.0, col)
-			ci.draw_rect(Rect2(hc.x - 11, hc.y - 12, 22, 3), Color("#e8c34a"))
+				_strand(ci, chains.hat_tip.pts, 4.2, col)
+			_shape(ci, _rrect(Rect2(hc.x - 11.5, hc.y - 13.0, 23, 3.2), 1.0), Color("#e8c34a"), 0.8)
+			ci.draw_circle(hc.lerp(tip, 0.45) + Vector2(f * 2.0, 0), 1.4, Color("#ffe66b"))
 		"headband":
-			ci.draw_rect(Rect2(hc.x - 15, hc.y - 8, 30, 2.5), col)
+			_shape(ci, _rrect(Rect2(hc.x - HEAD_R - 0.6, hc.y - 9.5, (HEAD_R + 0.6) * 2.0, 3.0), 1.2), col, 0.9)
+			_shape(ci, _rrect(Rect2(hc.x + f * 4.0 - 2.5, hc.y - 10.2, 5.0, 4.4), 1.0), Color("#c9d3dd"), 0.8)
 		"ribbon":
-			var p := hc + Vector2(-f * 8, -13)
-			ci.draw_colored_polygon(PackedVector2Array([p, p + Vector2(-6, -4), p + Vector2(-6, 4)]), col)
-			ci.draw_colored_polygon(PackedVector2Array([p, p + Vector2(6, -4), p + Vector2(6, 4)]), col)
-			ci.draw_circle(p, 1.8, col.darkened(0.2))
+			var p := hc + Vector2(-f * 8.5, -13.0)
+			_shape(ci, PackedVector2Array([p, p + Vector2(-7, -5), p + Vector2(-7.5, 4.5)]), col, 0.9)
+			_shape(ci, PackedVector2Array([p, p + Vector2(7, -5), p + Vector2(7.5, 4.5)]), col, 0.9)
+			_shape(ci, _ellipse(p, 2.0, 2.0, 10), col.darkened(0.2), 0.8)
 		"helm":
-			_hair_cap(ci, hc + Vector2(0, -1), col, -0.1)
-			ci.draw_rect(Rect2(hc.x - 15, hc.y - 6, 30, 3), col.darkened(0.25))
-			ci.draw_rect(Rect2(hc.x + f * 6 - 1, hc.y - 5, 2, 8), col.darkened(0.25))
-			ci.draw_line(hc + Vector2(-f * 2, -16), hc + Vector2(-f * 9, -24), Color("#c43b3b"), 3.0)
+			var dome := PackedVector2Array()
+			for k in 19:
+				var a := lerpf(PI, TAU, float(k) / 18.0)
+				dome.append(hc + Vector2(cos(a) * (HEAD_R + 1.8), sin(a) * (HEAD_R + 1.0) - 4.0))
+			_shape(ci, dome, col)
+			_shape(ci, _rrect(Rect2(hc.x - HEAD_R - 1.8, hc.y - 7.5, (HEAD_R + 1.8) * 2.0, 3.5), 1.0), col.darkened(0.25))
+			# Nose guard in front of the face, between the eyes and the nose tip.
+			_shape(ci, _rrect(Rect2(hc.x + f * 10.5 - 1.1, hc.y - 6.0, 2.2, 10.0), 1.0), col.darkened(0.25), 0.8)
+			ci.draw_arc(hc + Vector2(-f * 2.0, -2.0), HEAD_R - 2.0, PI * 1.2, PI * 1.5, 8, col.lightened(0.45), 1.6, true)
+			_strand(ci, PackedVector2Array([origin + (hc + Vector2(-f * 2, -HEAD_R - 1)) * U, origin + (hc + Vector2(-f * 8, -HEAD_R - 7)) * U, origin + (hc + Vector2(-f * 15, -HEAD_R - 6)) * U]), 4.0, Color("#c43b3b"))
 
 ## Rim light: a colored edge on the side of the head, hair and body that faces each nearby light.
 func _draw_rim(ci: CanvasItem, f: float, bob: float) -> void:
@@ -516,12 +730,11 @@ func _draw_rim(ci: CanvasItem, f: float, bob: float) -> void:
 		var col: Color = l.color
 		var s: float = l.strength
 		var a := d.angle()
-		var hc := Vector2(f * 1.0, -51 + bob)
-		ci.draw_arc(hc, 14.5, a - 1.0, a + 1.0, 12, Color(col.lightened(0.3), 0.8 * s), 2.2)
-		ci.draw_arc(hc, 12.5, a - 0.6, a + 0.6, 8, Color(col, 0.35 * s), 2.0)
+		var hc := _hc(f, bob)
+		ci.draw_arc(hc, HEAD_R + 1.0, a - 1.0, a + 1.0, 14, Color(col.lightened(0.3), 0.85 * s), 2.0, true)
+		ci.draw_arc(hc, HEAD_R - 1.5, a - 0.6, a + 0.6, 10, Color(col, 0.3 * s), 2.0, true)
 		var side := signf(d.x) if absf(d.x) > 0.1 else f
-		ci.draw_line(Vector2(side * 8.5, -38 + bob), Vector2(side * 9.5, -20), Color(col.lightened(0.2), 0.6 * s), 1.8)
+		ci.draw_line(Vector2(side * 8.6, -39 + bob), Vector2(side * 8.8, -22), Color(col.lightened(0.2), 0.6 * s), 1.6, true)
 		if d.y < 0.3:
-			ci.draw_line(Vector2(side * 4.0, -19), Vector2(side * 4.0, -3), Color(col, 0.4 * s), 1.5)
-		# A soft wash of the light's color over the lit side.
-		ci.draw_circle(hc + d * 5.0, 10.0, Color(col, 0.10 * s))
+			ci.draw_line(Vector2(side * 4.5, -20), Vector2(side * 4.5, -4), Color(col, 0.4 * s), 1.4, true)
+		ci.draw_circle(hc + d * 5.0, 11.0, Color(col, 0.08 * s))

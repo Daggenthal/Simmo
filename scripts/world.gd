@@ -281,7 +281,7 @@ func award_xp(mob: Mob, killer: Node2D) -> Dictionary:
 	FloatText.spawn(mob.get_parent(), mob.global_position + Vector2(0, -mob.size.y - 16), "+%d XP" % got[shown], Color("#9be37d"))
 	return got
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	for entry in _respawn_queue.duplicate():
 		entry.t -= delta
 		if entry.t <= 0.0:

@@ -26,6 +26,7 @@ var drops: Array = []       # {p, v, kind}
 var lamps: Array = []       # {pos, light}
 var lava_lights: Array = []
 var _layers: Dictionary = {}
+## Visual-only randomness (trees, rain). Never the global RNG, so frame rate can't shift gameplay rolls.
 var _rng := RandomNumberGenerator.new()
 var _trees: Array = []
 
@@ -103,9 +104,13 @@ func view_rect() -> Rect2:
 	var r := Rect2(inv * Vector2.ZERO, vp.get_visible_rect().size / vp.get_canvas_transform().get_scale())
 	return r.grow(40.0)
 
-func _process(delta: float) -> void:
+## Water and snow are simulation (they react to feet), so they run on the fixed physics tick:
+## the same result at any frame rate. Rain and snowflakes are visual and move per frame.
+func _physics_process(delta: float) -> void:
 	_tick_water(delta)
 	_tick_snow(delta)
+
+func _process(delta: float) -> void:
 	_tick_precip(delta)
 	var lamp_e := clampf(Lighting.darkness * 1.6 - 0.15, 0.0, 1.0)
 	for l in lamps:
@@ -405,7 +410,7 @@ func _tick_precip(delta: float) -> void:
 	var is_snow := weather.state == "snow" or (snowy and weather.rain > 0.0)
 	var target := int(weather.rain * (160.0 if not is_snow else 120.0))
 	while drops.size() < target:
-		drops.append({"p": Vector2(randf_range(view.position.x, view.end.x), view.position.y - randf_range(0, 120)), "kind": "snow" if is_snow else "rain", "ph": randf() * TAU})
+		drops.append({"p": Vector2(_rng.randf_range(view.position.x, view.end.x), view.position.y - _rng.randf_range(0, 120)), "kind": "snow" if is_snow else "rain", "ph": _rng.randf() * TAU})
 	if drops.size() > target:
 		drops.resize(target)
 	var wind := WeatherState.wind
@@ -417,10 +422,10 @@ func _tick_precip(delta: float) -> void:
 			p += Vector2(wind * 45.0 + sin(WeatherState.clock * 1.5 + d.ph) * 12.0, 38.0) * delta
 		var floor_y := _floor_under(p.x, p.y)
 		if p.y >= floor_y or p.x < view.position.x - 60 or p.x > view.end.x + 60:
-			if p.y >= floor_y and d.kind == "rain" and _layers.has("sky_fx") and randf() < 0.25:
+			if p.y >= floor_y and d.kind == "rain" and _layers.has("sky_fx") and _rng.randf() < 0.25:
 				d.splash = 0.15
 				d.sp = Vector2(p.x, floor_y)
-			p = Vector2(randf_range(view.position.x, view.end.x), view.position.y - randf_range(0, 40))
+			p = Vector2(_rng.randf_range(view.position.x, view.end.x), view.position.y - _rng.randf_range(0, 40))
 		d.p = p
 		if d.has("splash"):
 			d.splash = float(d.splash) - delta

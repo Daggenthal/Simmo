@@ -4,6 +4,7 @@
 #   ./run.sh debug      play with debug mode on (full logging, hitboxes, F3 overlay)
 #   ./run.sh editor     open the project in the Godot editor
 #   ./run.sh test       run all headless test suites (SIMMO_SEED=n to vary the seed)
+#   ./run.sh rendercheck  draw every screen for real and fail on engine errors (needs a display)
 # Env: GODOT=/path/to/godot to pick a binary, SIMMO_NO_COLOR=1 for plain output.
 
 set -uo pipefail
@@ -54,6 +55,35 @@ case "${1:-play}" in
 			c=$?
 			if [[ $c -eq 0 ]]; then echo "${GREEN}$t passed${RESET}"; else echo "${RED}$t failed (exit $c)${RESET}"; code=1; fi
 		done
+		# Frame rate independence: the same scenario must end exactly the same at any FPS.
+		ref=""
+		fps_ok=1
+		for fps in 30 60 144 240; do
+			fp="$("$GODOT_BIN" --headless --fixed-fps $fps --path . --script res://tests/fps_probe.gd 2>&1 | grep '^FINGERPRINT')"
+			if [[ -z "$ref" ]]; then ref="$fp"; elif [[ "$fp" != "$ref" ]]; then
+				fps_ok=0
+				echo "${RED}fps $fps differs:${RESET} $fp"
+				echo "${YELLOW}  vs 30 fps:${RESET} $ref"
+			fi
+		done
+		if [[ -n "$ref" && $fps_ok -eq 1 ]]; then echo "${GREEN}fps_probe passed (30 / 60 / 144 / 240 fps play out identically)${RESET}"; else echo "${RED}fps_probe failed${RESET}"; code=1; fi
 		exit $code ;;
-	*) echo "${YELLOW}Unknown command '$1'.${RESET} Use: play, debug, editor, test"; exit 2 ;;
+	rendercheck)
+		# Draws every screen for real (needs a display; on Linux: xvfb-run -a ./run.sh rendercheck)
+		# and fails on any engine error, e.g. a polygon the renderer can't fill. Headless tests can't see these.
+		code=0
+		runs=("screenshot.gd -- 1280x720 start" "screenshot_creator.gd" "screenshot_dolls.gd" "screenshot_boss.gd" "screenshot_menu.gd" "screenshot_items.gd" "screenshot_warp.gd" "screenshot_portal.gd")
+		for sc in day_pond night_lights storm snow; do runs+=("screenshot_world.gd -- $sc"); done
+		for r in "${runs[@]}"; do
+			read -r tool rest <<< "$r"
+			out="$("$GODOT_BIN" --path . --rendering-driver opengl3 --script "res://tools/$tool" $rest 2>&1)"
+			n=$(printf '%s\n' "$out" | grep -c '^ERROR:')
+			if [[ $n -eq 0 ]]; then echo "${GREEN}$r: clean${RESET}"; else
+				echo "${RED}$r: $n engine errors${RESET}"
+				printf '%s\n' "$out" | grep -A4 '^ERROR:' | grep -E '^ERROR|\[0\]' | sort | uniq -c | head -6
+				code=1
+			fi
+		done
+		exit $code ;;
+	*) echo "${YELLOW}Unknown command '$1'.${RESET} Use: play, debug, editor, test, rendercheck"; exit 2 ;;
 esac

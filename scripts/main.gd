@@ -46,6 +46,18 @@ func _ready() -> void:
 		Log.crash("Could not load %s, cannot start" % BALANCE_PATH)
 		return
 	Combat.setup(balance)
+	# Settings first, so the window has its size before the first screen shows.
+	var pause_layer := CanvasLayer.new()
+	pause_layer.layer = 15
+	pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(pause_layer)
+	pause_menu = PauseMenu.new()
+	pause_menu.main = self
+	pause_layer.add_child(pause_menu)
+	if load_user_settings:
+		pause_menu.load_settings()
+	else:
+		pause_menu.apply_settings()
 	if show_start_screen:
 		_start_layer = CanvasLayer.new()
 		_start_layer.layer = 20
@@ -151,17 +163,7 @@ func start_game(id: String, look: Dictionary = {}, player_name := "") -> void:
 	chatter = Chatter.new()
 	add_child(chatter)
 	chatter.setup(self, chat_data)
-	var pause_layer := CanvasLayer.new()
-	pause_layer.layer = 15
-	pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
-	add_child(pause_layer)
-	pause_menu = PauseMenu.new()
-	pause_menu.main = self
-	pause_layer.add_child(pause_menu)
-	if load_user_settings:
-		pause_menu.load_settings()
-	else:
-		pause_menu.apply_settings()
+	pause_menu.apply_settings()
 	ChatLog.add("system", "Welcome to Simmo! You are a %s in %s." % [player.class_name_label(), world.map.name])
 	if spawn_sims:
 		summon_party()

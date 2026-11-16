@@ -10,6 +10,7 @@ var warning_text := ""
 var warning_danger := ""
 var _warning_t := 0.0
 var show_help := true
+var show_fps := false
 const HELP_LINES := [
 	"Move: Arrows / WASD    Jump: Alt / Space    Attack: Ctrl / J",
 	"Drop down: Down + Jump    Auto-battle: Q / Tab    Weapons: 1-2 or E",
@@ -127,6 +128,9 @@ func _draw() -> void:
 	_text(Vector2(x, 16), lv, Color("#ffd84a"), 9)
 	x += _font.get_string_size(lv, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x + 8
 	_text(Vector2(x, 16), "Kills %d" % player.kills, Color("#cfd8e3"), 9)
+	if show_fps:
+		x += _font.get_string_size("Kills %d" % player.kills, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x + 10
+		_text(Vector2(x, 16), "%d FPS" % Engine.get_frames_per_second(), Color("#7fe39b"), 9)
 	_draw_portal_hint(vs)
 	_draw_warning(vs)
 	_draw_boss_bar(vs)

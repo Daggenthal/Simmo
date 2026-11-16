@@ -96,7 +96,8 @@ func night_amount() -> float:
 	var d := cos((time_of_day - 0.5) * TAU)   # 1 at noon, -1 at midnight
 	return clampf(0.5 - d * 0.9, 0.0, 1.0)
 
-func _process(delta: float) -> void:
+## On the physics tick: wind and the clock drive hair, cloth and grass, which simulate on it too.
+func _physics_process(delta: float) -> void:
 	WeatherState.clock += delta
 	if day_cycle:
 		time_of_day = fmod(time_of_day + delta / float(cfg.get("day_length", 480.0)), 1.0)

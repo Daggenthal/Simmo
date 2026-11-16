@@ -11,11 +11,14 @@ var _party_t := 0.0
 var _poll_t := 0.0
 var _said_t: Dictionary = {}   # sim -> seconds until it may talk again
 var _asked: Dictionary = {}    # sim -> already asked for potions
-var _party_gap := 0.0          # party-wide pause between ordinary lines, so Simmos don't chain-chat
+var _party_gap := 0.0
+## Its own random numbers, so chat never shifts gameplay rolls (crits, loot).
+var rng := RandomNumberGenerator.new()          # party-wide pause between ordinary lines, so Simmos don't chain-chat
 
 func setup(m: Node, chat_data: Dictionary) -> void:
 	main = m
 	data = chat_data
+	rng.seed = randi()  # one draw at setup: chat stays reproducible with the game's seed
 	_local_t = _roll("local_every")
 	_party_t = _roll("party_every")
 	main.world.map_changed.connect(_on_map)
@@ -28,16 +31,19 @@ func watch(a: Actor) -> void:
 		a.leveled_up.connect(_on_level)
 		a.ultimate_used.connect(_on_ult)
 
+func _pick(arr: Array):
+	return arr[rng.randi() % arr.size()] if not arr.is_empty() else null
+
 func _roll(key: String) -> float:
 	var r: Array = data.get(key, [10, 20])
-	return randf_range(float(r[0]), float(r[1]))
+	return rng.randf_range(float(r[0]), float(r[1]))
 
 func _fill(s: String, extra := {}) -> String:
 	var p = main.player
 	# Real values first; only lines without one (passers-by bragging) get a made-up level.
 	for k in extra:
 		s = s.replace("{%s}" % k, str(extra[k]))
-	return s.replace("{player}", "you" if p == null or p.display_name == "" else p.display_name).replace("{lvl}", str(randi_range(5, 40)))
+	return s.replace("{player}", "you" if p == null or p.display_name == "" else p.display_name).replace("{lvl}", str(rng.randi_range(5, 40)))
 
 ## A sim says a line of `kind` in party chat (rate-limited per sim unless forced).
 func party_say(sim: Actor, kind: String, extra := {}, force := false) -> void:
@@ -50,7 +56,7 @@ func party_say(sim: Actor, kind: String, extra := {}, force := false) -> void:
 		return
 	_said_t[sim] = 8.0
 	_party_gap = 2.5
-	var line := _fill(lines.pick_random(), extra)
+	var line := _fill(_pick(lines), extra)
 	ChatLog.add("party", "%s: %s" % [sim.display_name, line])
 	sim.say(line)
 
@@ -61,21 +67,21 @@ func _sims() -> Array:
 			out.append(s)
 	return out
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	_party_gap = maxf(_party_gap - delta, 0.0)
 	for k in _said_t.keys():
 		_said_t[k] = float(_said_t[k]) - delta
 	_local_t -= delta
 	if _local_t <= 0.0:
 		_local_t = _roll("local_every")
-		var who: String = data.get("passersby", ["Someone"]).pick_random()
-		ChatLog.add("local", "%s: %s" % [who, _fill(data.get("local", ["hi"]).pick_random())])
+		var who: String = _pick(data.get("passersby", ["Someone"]))
+		ChatLog.add("local", "%s: %s" % [who, _fill(_pick(data.get("local", ["hi"])))])
 	_party_t -= delta
 	if _party_t <= 0.0:
 		_party_t = _roll("party_every")
 		var s := _sims()
 		if not s.is_empty():
-			party_say(s.pick_random(), "idle")
+			party_say(_pick(s), "idle")
 	_poll_t -= delta
 	if _poll_t <= 0.0:
 		_poll_t = 0.5
@@ -105,7 +111,7 @@ func _on_level(a: Actor, lvl: int) -> void:
 		ChatLog.add("system", "You reached level %d!" % lvl)
 		var s := _sims()
 		if not s.is_empty():
-			party_say(s.pick_random(), "level_up", {}, true)
+			party_say(_pick(s), "level_up", {}, true)
 	else:
 		party_say(a, "own_level", {"lvl": lvl}, true)
 
@@ -121,9 +127,9 @@ func _on_map(_id: String) -> void:
 	ChatLog.add("system", "Entered %s (%s)" % [main.world.map.name, main.world.level_label()])
 	var s := _sims()
 	if not s.is_empty():
-		party_say(s.pick_random(), "map", {"map": main.world.map.name}, true)
+		party_say(_pick(s), "map", {"map": main.world.map.name}, true)
 
 func _on_loot(item_name: String) -> void:
 	var s := _sims()
-	if not s.is_empty() and randf() < 0.3:
-		party_say(s.pick_random(), "loot", {"item": item_name})
+	if not s.is_empty() and rng.randf() < 0.3:
+		party_say(_pick(s), "loot", {"item": item_name})

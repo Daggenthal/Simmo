@@ -3,6 +3,8 @@ config_version=5
 
 [application]
 
+run/max_fps=0
+
 config/name="Simmo"
 config/description="M1 prototype: combat, portal maps and a SimPlayer party with placeholder art"
 run/main_scene="res://main.tscn"
@@ -18,8 +20,9 @@ Sfx="*res://scripts/sfx.gd"
 
 window/size/viewport_width=640
 window/size/viewport_height=360
-window/size/window_width_override=1280
-window/size/window_height_override=720
+window/size/window_width_override=1920
+window/size/window_height_override=1080
+window/vsync/vsync_mode=0
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/stretch/scale_mode="integer"
@@ -30,6 +33,11 @@ renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
 textures/canvas_textures/default_texture_filter=0
 2d/snap/snap_2d_transforms_to_pixel=true
+
+[physics]
+
+common/physics_ticks_per_second=60
+common/physics_interpolation=true
 
 [layer_names]
 

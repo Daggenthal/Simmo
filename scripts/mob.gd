@@ -356,6 +356,7 @@ func respawn() -> void:
 	_aggro = null
 	position = home
 	velocity = Vector2.ZERO
+	reset_physics_interpolation()
 	collision_mask = Actor.LAYER_GROUND | Actor.LAYER_PLATFORMS
 	set_physics_process(true)
 

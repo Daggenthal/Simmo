@@ -68,5 +68,6 @@ func _revive() -> void:
 	var at: Vector2 = brain.leader.global_position if brain.has_leader() else _spawn_point
 	position = at
 	velocity = Vector2.ZERO
+	reset_physics_interpolation()
 	_invuln = 2.0
 	stats_changed.emit()

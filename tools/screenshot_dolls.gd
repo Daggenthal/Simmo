@@ -40,9 +40,14 @@ func _process(_d: float) -> bool:
 	if _frame == 90:
 		var img := root.get_texture().get_image()
 		img.save_png(ProjectSettings.globalize_path("res://screenshots/dolls.png"))
-		var r := Rect2i(img.get_width() / 2 - 160, img.get_height() - 260, 320, 150)
+		# Crop around the line-up wherever the camera put it.
+		var scale := float(img.get_width()) / root.get_visible_rect().size.x
+		var mid: Vector2 = (actors[0].get_global_transform_with_canvas().origin + actors[actors.size() - 1].get_global_transform_with_canvas().origin) / 2.0 * scale
+		var w := int(220 * scale / 2.0)
+		var h := int(90 * scale / 2.0)
+		var r := Rect2i(int(mid.x) - w / 2, int(mid.y) - h + int(12 * scale / 2.0), w, h)
 		var crop := img.get_region(r)
-		crop.resize(r.size.x * 3, r.size.y * 3, Image.INTERPOLATE_NEAREST)
+		crop.resize(r.size.x * 2, r.size.y * 2, Image.INTERPOLATE_NEAREST)
 		crop.save_png(ProjectSettings.globalize_path("res://screenshots/dolls_zoom.png"))
 		root.get_node("Log").ok("saved screenshots/dolls.png and dolls_zoom.png")
 		quit(0)

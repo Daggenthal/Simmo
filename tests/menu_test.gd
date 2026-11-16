@@ -129,7 +129,7 @@ func _settings(menu) -> void:
 	menu.load_settings()
 	_check(absf(sfx.sfx_volume - 0.25) < 0.03, "and loaded back")
 	# Back to defaults for other tests in this run.
-	menu.settings = {"master": 0.9, "effects": 0.8, "ambient": 0.6, "mute": false, "weather": true, "day_cycle": true, "time": 0.4, "auto_advance": true, "show_help": true}
+	menu.settings = menu.DEFAULTS.duplicate()
 	menu.apply_settings()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(menu.settings_path))
 

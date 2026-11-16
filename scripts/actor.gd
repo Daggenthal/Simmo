@@ -656,6 +656,7 @@ func _shadow_step() -> void:
 	if m == null or not is_instance_valid(m):
 		global_position = _shadow_home
 		velocity = Vector2.ZERO
+		reset_physics_interpolation()
 		modulate = Color.WHITE
 		_shadow_queue.clear()
 		return
@@ -664,6 +665,7 @@ func _shadow_step() -> void:
 	var side := -1.0 if randf() < 0.5 else 1.0
 	global_position = Vector2(m.global_position.x + side * (m.size.x / 2.0 + 8.0), m.global_position.y)
 	velocity = Vector2.ZERO
+	reset_physics_interpolation()
 	facing = 1 if m.global_position.x >= global_position.x else -1
 	_swing_time = 0.12
 	_swing_len = 0.12
@@ -1100,6 +1102,7 @@ func _respawn() -> void:
 	mp = max_mp
 	position = world.spawn_point if world else _spawn_point
 	velocity = Vector2.ZERO
+	reset_physics_interpolation()
 	_invuln = 2.0
 	brain.reset()
 	stats_changed.emit()
@@ -1108,6 +1111,7 @@ func _respawn() -> void:
 func arrive(pos: Vector2) -> void:
 	position = pos
 	velocity = Vector2.ZERO
+	reset_physics_interpolation()
 	_warp_t = 0.0
 	self_modulate.a = 1.0
 	_spawn_point = pos

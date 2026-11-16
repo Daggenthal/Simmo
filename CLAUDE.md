@@ -2,7 +2,7 @@
 
 Simmo is an offline "fake MMO" in Godot 4.7: MapleStory-style side view, simulated players (the owner calls them **Simmos**; `SimPlayer` in code) who party, guild and trade with you, and idle progress while you're away. Repo: github.com/Daggenthal/Simmo. The full design lives in the design doc "Simulated MMO Idle Game: Design Doc" (ask the owner for the link if you need it).
 
-Current state: milestone M1. Everything is drawn and synthesized in code (no art or audio files). Rendering: 640x360 world units drawn at window resolution (`canvas_items` stretch), so detail is 2x+.
+Current state: milestone M1. Everything is drawn and synthesized in code (no art or audio files). Rendering: 640x360 world units drawn at window resolution (`canvas_items` stretch, integer scale): 720p / 1080p / 1440p / 4K are exact 2x / 3x / 4x / 6x. The window defaults to the biggest that fits the screen (Settings: window size, fullscreen, VSync, FPS cap, FPS counter). FPS is uncapped by default; gameplay runs on the fixed 60 Hz physics tick with physics interpolation, and `tests/fps_probe.gd` proves 30 / 60 / 144 / 240 fps play out identically.
 - Start: class select (Warrior / Mage / Rogue), then a MapleStory-style character creator (gender, skin, face, eyes, hair style and color, top, bottom, shoes, hat, cape, name).
 - Combat: class-locked weapons, four skills per class, a 60 s ultimate each, STR / DEX / INT / LUK with AP and auto-assign, element combos, auto-battle with nav-graph pathing (mages fight from range), auto-potions, auto-advance to the next map.
 - World: four maps with portals and a .hack-style warp, mobs and XP scaled by level, zone bosses after 30 kills (HP bar, enrage timer, telegraphed slams) that drop Diablo-style rarity chests with equippable gear. Day / night, rain, storms, snow that builds up and takes footprints, ponds with ripple physics, bridges, swaying grass and trees, 2D lights with shadows and rim light on characters.
@@ -16,6 +16,7 @@ Current state: milestone M1. Everything is drawn and synthesized in code (no art
 
 ```
 ./run.sh test     # all eleven headless suites, about a minute, exit 0 = pass
+./run.sh rendercheck   # draws every screen for real, fails on engine errors (needs a display)
 SIMMO_SEED=3 ./run.sh test   # same with another seed; loop a few seeds to catch flaky checks
 ./run.sh          # play
 ./run.sh debug    # hitboxes, debug overlay, full logging
@@ -106,6 +107,10 @@ Output goes to `screenshots/` (gitignored), now at the window's full resolution.
 - **Warp travel takes time:** Portals warp out for `warp.out_time` (1.2 s) before the map changes; wait about 90 frames after pressing Up.
 - **Doll chains need points before drawing:** `Doll.set_look` lays chains out immediately; a new chain added elsewhere must call `_reset_chains()`.
 - **Typed loop vars:** `for side in [-1.0, 1.0]` gives a Variant; `var a := side * x` then fails to parse. Write `for side: float in [...]`.
+- **Headless tests can't see render errors.** Polygons the renderer can't fill ("Invalid polygon data, triangulation failed") only show up when drawing for real. Run `./run.sh rendercheck` (needs a display) after visual changes, and don't filter `ERROR:` lines out of screenshot output. Cloth from physics chains must be drawn as quad strips (`Doll._ribbon`), never one polygon: chains cross when cloth folds.
+- **"ObjectDB instances were leaked at exit" from the screenshot tools** is audio playbacks still running when a tool quits mid-sound (engine shutdown order). Harmless and tool-only; the game's normal exit is clean.
+- **Frame rate independence:** Anything that changes game state runs in `_physics_process` (fixed 60 Hz). `_process` is for visuals only and must never touch the global RNG (use a private `RandomNumberGenerator`, like `Chatter.rng` and `MapEnvironment._rng`), or frame rate shifts every later crit and loot roll. After a teleport call `reset_physics_interpolation()`. `./run.sh test` runs the FPS probe at four rates and compares fingerprints.
+- **Doll art:** MapleStory style built from convex pieces: `_shape` (fill + antialiased outline in `_ol(color)`), `_ellipse`, `_capsule`, `_rrect`, `_lock` for hair locks, `_strand` for physics hair, `_ribbon` for cloth. Keep every filled polygon convex or simple; anything built from physics points goes through `_ribbon` or `_strand`. Hair and hats must stop above the eyes (cap hairline at y -6 on the face side).
 - **Fixed seeds hide flakes:** A check that passes on the default seed can fail on others (happened twice in M1: a mob parked next to a mid-jump player, and combo dummies that were only "tough" for a level 1 player). Loop `SIMMO_SEED`.
 
 ## Rules the game currently follows (keep them unless the owner changes them)
