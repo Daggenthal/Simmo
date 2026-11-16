@@ -54,6 +54,7 @@ func _physics_process(_d: float) -> bool:
 				_check_scaling()
 				_check_xp_rules(world, p)
 				_check_resist(world, p)
+				_check_danger(world)
 				_goto("portal")
 		"portal":
 			# Walk onto the east portal of the first map and press Up.
@@ -77,6 +78,8 @@ func _physics_process(_d: float) -> bool:
 				for m in world.mobs:
 					lowest = mini(lowest, m.level)
 				_check(lowest >= 6, "Mushroom Grove mobs are stronger (lowest level %d)" % lowest)
+				_check(_main.hud.warning_danger == "deadly" and "Lv 6-12" in _main.hud.warning_text and _main.hud._warning_t > 0.0,
+					"level 1 entering Mushroom Grove gets a danger warning (%s: %s)" % [_main.hud.warning_danger, _main.hud.warning_text])
 				var types := {}
 				for m in world.mobs:
 					types[m.id] = true
@@ -90,6 +93,7 @@ func _physics_process(_d: float) -> bool:
 				_press_up()
 			if _pf == 60:
 				_check(world.map_id == "mossy_meadow", "west portal leads back (%s)" % world.map_id)
+				_check(_main.hud.warning_text == "", "no warning when entering a map at your level")
 				_check(absf(p.global_position.x - 1760.0) < 50.0, "and lands at the east portal (x=%.0f)" % p.global_position.x)
 				_goto("walk_portals")
 		"walk_portals":
@@ -205,7 +209,16 @@ func _check_scaling() -> void:
 		var lvl := int(b.level)
 		var need := int(round(float(pl.xp_base) * pow(lvl, float(pl.xp_exponent))))
 		kills.append(float(need) / float(Scal.mob_stats(b, lvl, sc).xp))
-	_check(kills.min() >= 2.0 and kills.max() <= 10.0, "kills per level on fitting mobs stay sane (%s)" % ", ".join(kills.map(func(k): return "%.1f" % k)))
+	var grows := true
+	for k in range(1, kills.size()):
+		grows = grows and kills[k] > kills[k - 1]
+	_check(kills[0] >= 5.0 and kills.max() <= 45.0 and grows, "kills per level start around 8 and grow slowly with level (%s)" % ", ".join(kills.map(func(k): return "%.1f" % k)))
+
+## Portals warn but never block: hard under the minimum level, deadly 5+ under.
+func _check_danger(world) -> void:
+	_check(world.danger("mushroom_grove", 1) == "deadly", "Lv 1 -> Mushroom Grove (Lv 6-12) is deadly")
+	_check(world.danger("mushroom_grove", 4) == "hard", "Lv 4 -> Mushroom Grove is hard")
+	_check(world.danger("mushroom_grove", 6) == "" and world.danger("mushroom_grove", 20) == "", "Lv 6 and Lv 20 -> Mushroom Grove is fine")
 
 func _check_xp_rules(world, p) -> void:
 	var sc: Dictionary = _main.balance.mob_scaling

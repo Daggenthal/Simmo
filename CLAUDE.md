@@ -2,14 +2,14 @@
 
 Simmo is an offline "fake MMO" in Godot 4.7: MapleStory-style side view, simulated players (SimPlayers) who party, guild and trade with you, and idle progress while you're away. Repo: github.com/Daggenthal/Simmo. The full design lives in the design doc "Simulated MMO Idle Game: Design Doc" (ask the owner for the link if you need it).
 
-Current state: milestone M1 (placeholder art drawn in code). Movement, melee weapons, thrown kunai, four spells with status effects and combos, auto-battle with nav-graph pathing. Four maps joined by portals (`data/maps.json`), mob stats and XP scale by level, XP drops off on low mobs. A party of 3 SimPlayers (tank, healer, ranged) shares the auto-battle brain, follows the player across platforms and through portals, and splits kill XP.
+Current state: milestone M1 (placeholder art drawn in code). Movement, melee weapons, thrown kunai, four spells with status effects and combos, auto-battle with nav-graph pathing. Four maps joined by portals (`data/maps.json`), mob stats and XP scale by level, XP drops off on low mobs. A party of 3 SimPlayers (tank, healer, ranged) shares the auto-battle brain, follows the player across platforms and through portals, and splits kill XP. Portals warn about under-leveled maps without blocking. Inventory with potions and XP tonics, loot from party kills, auto-potions during auto-battle.
 
 ## How to work on this repo
 
 **The loop:** Reproduce, write a failing test, fix, run the full suite several times, look at a screenshot when anything visual changed. Every bug fixed so far got a regression test first; keep doing that. When a test passes without your fix, the test is not reproducing the bug yet (this happened twice; see Gotchas).
 
 ```
-./run.sh test     # all four headless suites, ~10 s total, exit 0 = pass
+./run.sh test     # all five headless suites, ~10 s total, exit 0 = pass
 SIMMO_SEED=3 ./run.sh test   # same with another seed; loop a few seeds to catch flaky checks
 ./run.sh          # play
 ./run.sh debug    # hitboxes, debug overlay, full logging
@@ -49,7 +49,9 @@ Output goes to `screenshots/` (gitignored). Software rendering is slow: if mobs 
 | --- | --- |
 | `main.tscn`, `scripts/main.gd` | Entry: loads balance, builds world, player, party, camera, sky; follows map changes; global hotkeys (Up = portal, P = party) |
 | `scripts/actor.gd` | `Actor`: the body shared by player and sims. Movement from an intent dict, weapons, spells (incl. heal), HP/MP/XP, paper-doll drawing from `look` |
-| `scripts/player.gd` | `Player extends Actor`: keyboard/controller input, auto-battle toggle and manual override |
+| `scripts/player.gd` | `Player extends Actor`: keyboard/controller input, auto-battle toggle and manual override, inventory use (`use_item`, `use_best`), auto-potions |
+| `scripts/inventory.gd`, `scripts/inventory_ui.gd` | `Inventory` (slots, stacking, item defs) and `InventoryUI` (I window, click to use, item icons) |
+| `data/items.json` | Items, loot table, starter kit, inventory size, use cooldown |
 | `scripts/sim_player.gd` | `SimPlayer extends Actor`: role setup from `sim_roles`, knockout and revive next to the leader |
 | `scripts/brain.gd` | `Brain`: auto-battle (`think`, `_pick_target`, `pick_spell`), nav routing, follow-the-leader, roles (tank front, healer heals, ranged perches) |
 | `scripts/scaling.gd` | `Scaling`: mob stats by level, XP by level difference, party XP share, level label colors |
@@ -65,7 +67,8 @@ Output goes to `screenshots/` (gitignored). Software rendering is slow: if mobs 
 | `tests/smoke_test.gd` | Movement, platforms, weapons, auto-battle, pathing, target focus |
 | `tests/magic_test.gd` | Statuses, combos, spells, mana, pacing, kunai, weaving |
 | `tests/world_test.gd` | Every map's data (reachable, connected, valid spawns, two-way portals), portal travel, scaling, XP rules, resists |
-| `tests/party_test.gd` | Sims: spawn, follow onto platforms, role positions, heal, ranged perch, XP share, fighting, knockout, portal |
+| `tests/party_test.gd` | Sims: spawn, follow onto platforms, role positions, heal, ranged perch, XP share, loot, fighting, knockout, portal |
+| `tests/items_test.gd` | Inventory stacking, potions, best-potion pick, XP tonics and expiry, loot and min_level, auto-potions, R hotkey, I window clicks |
 
 ## Gotchas learned the hard way
 
@@ -91,15 +94,18 @@ Output goes to `screenshots/` (gitignored). Software rendering is slow: if mobs 
 - Knockback never pushes mobs off their platform.
 - Every platform must be reachable by a real jump, on every map (tested).
 - Mobs keep their map's level; they don't scale to the player. Stats follow the player's curves, so same-level fights feel the same at every level (tested). XP: full within 3 levels under, then -15% per level down to 10%; +5% per level above, up to +30%.
-- Kills per level on fitting mobs stay between 2 and 10 (tested). Listed mob XP follows `4 * level^1.3 * toughness`; keep that rule for new mobs.
+- Kills per level on fitting mobs start around 8 and grow slowly, 45 at most by Lv 21 (tested). Player curve: `32 * L^1.8`. A full auto party gains about 3 levels in its first minute, then about 1 level a minute or less by the Grove. Listed mob XP follows `4 * level^1.3 * toughness`; keep that rule for new mobs.
+- Portals never block travel. Under the map's minimum level the label and hint turn orange; 5+ under turns them red; entering shows a warning banner.
+- XP buffs multiply kill XP and don't stack (one "xp" buff; a weaker one is refused). Loot from any party kill goes to the player's inventory.
 - Party XP: each member on the map gets `xp * (1 + 0.2 * (n - 1)) / n`, adjusted for their own level.
 - Sims stay within 220 px of the leader, only fight mobs within 260 px of the leader, heal under 65% HP, and revive next to the leader 5 s after a knockout.
 
 ## Backlog, in order
 
-1. **M1 follow-ups:** Mob aggro should prefer the tank (taunt); sims chat lines; more hair styles, hats and outfits for paper dolls; name tags overlap when sims bunch up; the party frames don't show MP; sims don't pick up the player's weapon or level changes after joining beyond XP.
-2. **Away loop (M2):** Save/load (versioned, autosave), abstract simulation tick for off-screen sims, offline progress = abstract ticks for elapsed time (clamped), guild report screen.
-3. **Mobile:** Touch controls (virtual stick, jump, attack, skill buttons, AUTO), safe areas, Android export first, then iOS. Test on the Galaxy Z Fold 6 (folded and unfolded) and iPhone 17 Pro Max.
-4. **Maps:** Town services (shops, NPCs) in Mossy Meadow; a boss room at the end of Frostpeak; portals on platforms (supported in data via `y`, not used yet).
-5. **Polish found while testing:** Projectiles ignore platforms (they only stop at the target's floor height); lobbed globs can't splash on a platform with no mob on it; controller spell bindings (B / LB / L3 / R3) are temporary until a skill menu exists; the bottom bar is tight at 640 px wide.
-6. Later (see design doc): Guild system, trading with sims, chat (quick-chat + intent parser), tavern bartender mini-game, raids, world bosses, fake patch days.
+1. **Items follow-ups:** Ground drops with pickup (auto-battle would need to path to them); a potion shop in town and mesos/currency; equipment (weapons as items, stats); sims with their own inventories and potions; save the inventory (with M2 save/load).
+2. **M1 follow-ups:** Mob aggro should prefer the tank (taunt); sims chat lines; more hair styles, hats and outfits for paper dolls; name tags overlap when sims bunch up; the party frames don't show MP; sims don't pick up the player's weapon or level changes after joining beyond XP.
+3. **Away loop (M2):** Save/load (versioned, autosave), abstract simulation tick for off-screen sims, offline progress = abstract ticks for elapsed time (clamped), guild report screen.
+4. **Mobile:** Touch controls (virtual stick, jump, attack, skill buttons, AUTO), safe areas, Android export first, then iOS. Test on the Galaxy Z Fold 6 (folded and unfolded) and iPhone 17 Pro Max.
+5. **Maps:** Town services (shops, NPCs) in Mossy Meadow; a boss room at the end of Frostpeak; portals on platforms (supported in data via `y`, not used yet).
+6. **Polish found while testing:** Projectiles ignore platforms (they only stop at the target's floor height); lobbed globs can't splash on a platform with no mob on it; controller spell bindings (B / LB / L3 / R3) are temporary until a skill menu exists; the bottom bar is tight at 640 px wide.
+7. Later (see design doc): Guild system, trading with sims, chat (quick-chat + intent parser), tavern bartender mini-game, raids, world bosses, fake patch days.

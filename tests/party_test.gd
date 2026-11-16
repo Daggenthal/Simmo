@@ -168,6 +168,13 @@ func _physics_process(_d: float) -> bool:
 				_check(got.size() == 4, "a kill's XP goes to all 4 party members (%d)" % got.size())
 				_check(int(got.get(p, 0)) == int(round(100 * share)), "each member gets the party share (%d of 100, expected %d)" % [got.get(p, 0), int(round(100 * share))])
 				_check(p.xp > xp0 or p.level > lvl0, "player's XP went up")
+				# Loot from a sim's kill goes to the player.
+				world.loot_table = [{"item": "red_potion", "chance": 1.0}]
+				var n0: int = p.inventory.count("red_potion")
+				var m2 = _dummy(2, Vector2(950, 329), 10)
+				m2.take_hit(999, false, 1, _tank, 0.0)
+				_check(p.inventory.count("red_potion") == n0 + 1, "loot from the tank's kill lands in the player's inventory")
+				world.loot_table = _main.items.loot
 				_goto("fight")
 		"fight":
 			# Hands off with the whole map alive: sims should kill things too.

@@ -23,6 +23,9 @@ const BINDINGS := {
 	"debug_toggle": [KEY_F3],
 	"respawn_mobs": [KEY_F5],
 	"party_toggle": [KEY_P],
+	"inventory_toggle": [KEY_I],
+	"potion_hp": [KEY_R],
+	"potion_mp": [KEY_F],
 }
 
 const PAD_BUTTONS := {

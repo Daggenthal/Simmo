@@ -3,10 +3,95 @@ extends Actor
 ## The human player: keyboard/controller input, plus optional auto-battle (Q / Tab).
 ## Manual input takes over movement, but auto keeps swinging at anything in front;
 ## auto resumes after auto_pause_after_input with a fresh target.
+## Owns the inventory: potions (R / F or click in the I window) and XP tonics.
+## During auto-battle it drinks potions on its own when HP or MP runs low.
 
 var auto_battle := false
 var _auto_pause := 0.0
 var _auto_was_manual := false
+var inventory: Inventory
+var item_cfg: Dictionary = {}
+var items_used := 0
+var _item_cd := 0.0
+
+## items: data/items.json. Fills the starter kit.
+func setup_items(items: Dictionary) -> void:
+	item_cfg = items
+	inventory = Inventory.new(items.get("items", {}), int(items.get("inventory_slots", 24)))
+	for e in items.get("starter_kit", []):
+		inventory.add(String(e[0]), int(e[1]))
+
+## Use one of item `id`. Returns "" on success, or why it couldn't be used.
+func use_item(id: String) -> String:
+	if inventory == null or inventory.count(id) <= 0:
+		return "None left"
+	if _item_cd > 0.0:
+		return "Not yet"
+	var d: Dictionary = inventory.def(id)
+	match String(d.get("effect", "")):
+		"heal_hp":
+			if hp >= max_hp:
+				return "HP is full"
+			heal(int(d.amount))
+		"heal_mp":
+			if mp >= max_mp:
+				return "MP is full"
+			var before := mp
+			mp = minf(mp + float(d.amount), max_mp)
+			FloatText.spawn(get_parent(), global_position + Vector2(0, -H - 4), "+%d MP" % int(mp - before), Color("#7fb3ff"))
+		"xp_buff":
+			var cur: Dictionary = buffs.get("xp", {})
+			if not cur.is_empty() and float(cur.mult) > float(d.mult):
+				return "A stronger XP buff is active"
+			buffs["xp"] = {"mult": float(d.mult), "t": float(d.duration), "max_t": float(d.duration), "name": String(d.name), "color": String(d.color)}
+			FloatText.spawn(get_parent(), global_position + Vector2(0, -H - 14), "XP +%d%%" % int(round((float(d.mult) - 1.0) * 100.0)), Color(d.color), 1.4)
+			Log.ok("%s: %s" % [d.name, d.desc])
+		_:
+			return "Can't use that"
+	inventory.remove(id)
+	items_used += 1
+	_item_cd = float(item_cfg.get("use_cooldown", 0.5))
+	stats_changed.emit()
+	return ""
+
+## Use the best owned item with `effect` (heal_hp / heal_mp): the smallest one that covers
+## what's missing, or the biggest when none does. Returns "" on success or the reason.
+func use_best(effect: String) -> String:
+	var id := best_item(effect)
+	if id == "":
+		return "No potions"
+	return use_item(id)
+
+func best_item(effect: String) -> String:
+	if inventory == null:
+		return ""
+	var missing := float(max_hp - hp) if effect == "heal_hp" else max_mp - mp
+	var best := ""
+	var best_amt := 0.0
+	for id in inventory.defs:
+		var d: Dictionary = inventory.defs[id]
+		if String(d.get("effect", "")) != effect or inventory.count(id) <= 0:
+			continue
+		var amt := float(d.get("amount", 0))
+		var better: bool = best == "" \
+			or (amt >= missing and (best_amt < missing or amt < best_amt)) \
+			or (amt < missing and best_amt < missing and amt > best_amt)
+		if better:
+			best = id
+			best_amt = amt
+	return best
+
+## Manual use: show why it didn't work over the player's head.
+func use_and_report(result: String) -> void:
+	if result != "":
+		FloatText.spawn(get_parent(), global_position + Vector2(0, -H - 10), result, Color("#c8c8c8"), 0.9)
+
+## Auto-battle drinks potions when HP or MP runs low (like a MapleStory pet).
+func _auto_potions() -> void:
+	if hp > 0 and float(hp) / max_hp < float(cfg.get("auto_potion_hp_below", 0.0)):
+		use_best("heal_hp")
+	if mp / max_mp < float(cfg.get("auto_potion_mp_below", 0.0)) and not spells.is_empty():
+		use_best("heal_mp")
 
 func _ready() -> void:
 	super()
@@ -17,6 +102,9 @@ func _uses_brain() -> bool:
 
 func _get_intent(delta: float) -> Dictionary:
 	_auto_pause = max(_auto_pause - delta, 0.0)
+	_item_cd = maxf(_item_cd - delta, 0.0)
+	if auto_battle:
+		_auto_potions()
 	var intent := _read_manual()
 	if not auto_battle:
 		return intent

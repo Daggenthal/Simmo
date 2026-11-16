@@ -5,12 +5,17 @@ extends Control
 var player: Player
 var world: World
 var _hint_time := 8.0
+## Shown for a few seconds after entering a map that's above the player's level.
+var warning_text := ""
+var warning_danger := ""
+var _warning_t := 0.0
 var show_help := true
 const HELP_LINES := [
 	"Move: Arrows / WASD    Jump: Alt / Space    Attack: Ctrl / J",
 	"Drop down: Down + Jump    Auto-battle: Q / Tab    Weapons: 1-4 or E",
 	"Spells: Z Fire   X Frost   C Venom   V Lightning",
 	"Portal: stand on it + Up    Party on/off: P",
+	"Inventory: I    HP potion: R    MP potion: F",
 	"Respawn mobs: F5    Debug: F3    Hide this: F1",
 ]
 var _font: Font
@@ -37,8 +42,22 @@ func _ready() -> void:
 			player.set_auto_battle(on))
 	add_child(_auto_btn)
 
+## Called by main when the map changes (after the party has arrived).
+func on_map_entered() -> void:
+	warning_text = ""
+	warning_danger = world.danger(world.map_id, player.level)
+	if warning_danger == "":
+		return
+	var lv: Array = world.map.levels
+	if warning_danger == "deadly":
+		warning_text = "Danger: mobs here are Lv %d-%d and you're Lv %d. They can take you down fast." % [lv[0], lv[1], player.level]
+	else:
+		warning_text = "Warning: mobs here are Lv %d-%d and you're Lv %d. Expect a harder fight." % [lv[0], lv[1], player.level]
+	_warning_t = float(world._balance.get("map_warning", {}).get("banner_time", 6.0))
+
 func _process(delta: float) -> void:
 	_hint_time = max(_hint_time - delta, 0.0)
+	_warning_t = maxf(_warning_t - delta, 0.0)
 	if player and _auto_btn.button_pressed != player.auto_battle:
 		_auto_btn.set_pressed_no_signal(player.auto_battle)
 	_auto_btn.modulate = Color("#ffd84a") if player and player.auto_battle else Color.WHITE
@@ -75,6 +94,8 @@ func _draw() -> void:
 	if player.weapon.get("thrown", false) and player.imbue_element != "":
 		_text(Vector2(vs.x - 96 - _font.get_string_size("Imbued: " + player.imbue_element.capitalize(), HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x, vs.y - 30), "Imbued: %s" % player.imbue_element.capitalize(), Combat.element_color(player.imbue_element), 8)
 	_draw_skill_bar(vs)
+	_draw_quick_slots(vs)
+	_draw_buffs(vs)
 	if player.auto_battle:
 		_text(Vector2(vs.x / 2.0 - 30, 16), "AUTO BATTLE", Color("#ffd84a"), 11)
 	# Map name and level range, top left
@@ -86,6 +107,7 @@ func _draw() -> void:
 	x += _font.get_string_size(lv, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x + 8
 	_text(Vector2(x, 16), "Kills %d" % player.kills, Color("#cfd8e3"), 9)
 	_draw_portal_hint(vs)
+	_draw_warning(vs)
 	var party_bottom := _draw_party(vs)
 	# Controls panel: stays on screen, F1 hides or shows it.
 	if show_help:
@@ -103,8 +125,27 @@ func _draw_portal_hint(vs: Vector2) -> void:
 	var dest: Dictionary = world.maps.get(String(p.to), {})
 	var lv: Array = dest.get("levels", [])
 	var msg := "Up: Enter %s%s" % [dest.get("name", p.to), (" (Lv %d-%d)" % [lv[0], lv[1]]) if lv.size() == 2 else ""]
+	var d := world.danger(String(p.to), player.level)
+	match d:
+		"deadly":
+			msg += "  Far too strong for you!"
+		"hard":
+			msg += "  Stronger than you"
 	var w := _font.get_string_size(msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
-	_text(Vector2((vs.x - w) / 2.0, vs.y - 30), msg, Color("#bfe6ff"), 10)
+	_text(Vector2((vs.x - w) / 2.0, vs.y - 30), msg, Color("#bfe6ff") if d == "" else World.danger_color(d), 10)
+
+## Banner under the top edge after entering a map that's above the player's level.
+func _draw_warning(vs: Vector2) -> void:
+	if _warning_t <= 0.0 or warning_text == "":
+		return
+	var w := _font.get_string_size(warning_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+	# Below the controls panel while it's open (it spans most of the top on narrow screens).
+	var y := 22.0 + (HELP_LINES.size() * 11.0 + 10.0 if show_help else 0.0)
+	var r := Rect2((vs.x - w) / 2.0 - 8, y, w + 16, 16)
+	var a := clampf(_warning_t, 0.0, 1.0)  # fades out over the last second
+	draw_rect(r, Color(0.15, 0.02, 0.02, 0.7 * a))
+	draw_rect(r, Color(World.danger_color(warning_danger), a), false, 1.0)
+	_text(Vector2(r.position.x + 8, r.position.y + 12), warning_text, Color(World.danger_color(warning_danger), a), 10)
 
 ## Party frames, top right: name, level, role color, HP bar. Returns the y below them.
 func _draw_party(vs: Vector2) -> float:
@@ -169,6 +210,40 @@ func _draw_skill_bar(vs: Vector2) -> void:
 			draw_rect(Rect2(r.position, Vector2(size, size * frac)), Color(0, 0, 0, 0.6))
 		draw_rect(r, Color(1, 1, 1, 0.4), false, 1.0)
 		_text(r.position + Vector2(2, 9), String(sp.key), Color.WHITE, 8)
+
+## HP and MP potion quick slots (R / F), left of the skill bar: best potion's icon and total count.
+func _draw_quick_slots(vs: Vector2) -> void:
+	if player.inventory == null:
+		return
+	var size := 18.0
+	var x := vs.x - 6.0 - (player.spells.size() * 22.0 - 4.0) - 2 * (size + 4.0) - 6.0
+	var y := vs.y - 22.0 - size - 4.0
+	var k := 0
+	for pair in [["heal_hp", "R"], ["heal_mp", "F"]]:
+		var r := Rect2(x + k * (size + 4.0), y, size, size)
+		draw_rect(r, Color(0, 0, 0, 0.6))
+		var id: String = player.best_item(pair[0])
+		var total := 0
+		for iid in player.inventory.defs:
+			if String(player.inventory.defs[iid].get("effect", "")) == pair[0]:
+				total += player.inventory.count(iid)
+		if id != "":
+			InventoryUI.draw_icon(self, r.grow(-4), player.inventory.def(id))
+		draw_rect(r, Color(1, 1, 1, 0.4), false, 1.0)
+		_text(r.position + Vector2(2, 9), pair[1], Color.WHITE, 8)
+		var c := str(total)
+		_text(r.position + Vector2(size - 1 - _font.get_string_size(c, HORIZONTAL_ALIGNMENT_LEFT, -1, 7).x, size - 1), c, Color.WHITE if total > 0 else Color("#ff6b6b"), 7)
+		k += 1
+
+## Active buffs, bottom left above the bar: name, bonus and time left.
+func _draw_buffs(vs: Vector2) -> void:
+	var y := vs.y - 28.0
+	for b in player.buffs.values():
+		var t := int(ceil(float(b.t)))
+		var label := "%s  XP +%d%%  %d:%02d" % [b.name, int(round((float(b.mult) - 1.0) * 100.0)), t / 60, t % 60]
+		draw_rect(Rect2(6, y - 8, 6, 6), Color(b.color))
+		_text(Vector2(15, y - 1), label, Color(b.color), 8)
+		y -= 11.0
 
 func _draw_help() -> void:
 	var w := 0.0

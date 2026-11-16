@@ -49,7 +49,7 @@ case "${1:-play}" in
 	editor) exec "$GODOT_BIN" --editor --path . ;;
 	test)
 		code=0
-		for t in smoke_test magic_test world_test party_test; do
+		for t in smoke_test magic_test world_test party_test items_test; do
 			"$GODOT_BIN" --headless --fixed-fps 60 --path . --script "res://tests/$t.gd"
 			c=$?
 			if [[ $c -eq 0 ]]; then echo "${GREEN}$t passed${RESET}"; else echo "${RED}$t failed (exit $c)${RESET}"; code=1; fi

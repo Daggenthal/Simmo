@@ -55,6 +55,8 @@ var look: Dictionary = {}
 ## Who a support spell (heal) lands on; set by the brain before casting.
 var spell_target: Node2D = null
 var heals_done := 0
+## Timed effects, e.g. "xp": {mult, t, max_t, name, color}. XP buffs of one kind don't stack.
+var buffs: Dictionary = {}
 ## The intent used this frame (debug overlay and tests).
 var last_intent: Dictionary = {}
 var _font: Font
@@ -122,6 +124,7 @@ func _physics_process(delta: float) -> void:
 		if _drop_timer <= 0.0:
 			set_collision_mask_value(LAYER_PLATFORMS, true)
 
+	_tick_buffs(delta)
 	var intent := _get_intent(delta)
 	last_intent = intent
 	_apply(intent, delta)
@@ -478,6 +481,21 @@ func arrive(pos: Vector2) -> void:
 func _nav_reset() -> void:
 	_drop_timer = 0.0
 	set_collision_mask_value(LAYER_PLATFORMS, true)
+
+func _tick_buffs(delta: float) -> void:
+	for k in buffs.keys():
+		buffs[k].t -= delta
+		if buffs[k].t <= 0.0:
+			Log.info("%s wore off" % buffs[k].name)
+			buffs.erase(k)
+			stats_changed.emit()
+
+## Multiplier on kill XP from active buffs.
+func xp_mult() -> float:
+	var m := 1.0
+	for b in buffs.values():
+		m *= float(b.get("mult", 1.0))
+	return m
 
 func gain_xp(amount: int) -> void:
 	xp += amount

@@ -15,8 +15,8 @@
     "crit_chance": 0.12,
     "crit_mult": 2.0,
     "invuln_time": 0.8,
-    "xp_base": 12,
-    "xp_exponent": 1.5,
+    "xp_base": 32,
+    "xp_exponent": 1.8,
     "auto_retarget": 0.5,
     "auto_pause_after_input": 0.4,
     "starting_weapon": "short_sword",
@@ -46,7 +46,9 @@
       "shirt": "#d9534f",
       "pants": "#3b4a6b",
       "hat": ""
-    }
+    },
+    "auto_potion_hp_below": 0.35,
+    "auto_potion_mp_below": 0.2
   },
   "mobs": {
     "green_slime": {
@@ -521,5 +523,10 @@
         "hat": "band"
       }
     }
-  ]
+  ],
+  "map_warning": {
+    "_doc": "Entering a map under its minimum level: 'hard' when below it, 'deadly' when deadly_gap or more levels below. Travel is never blocked.",
+    "deadly_gap": 5,
+    "banner_time": 6.0
+  }
 }

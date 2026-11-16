@@ -16,6 +16,8 @@ var start_map := ""
 var _cam: Camera2D
 var _sky: ColorRect
 var _hills: Array = []
+var items: Dictionary = {}
+var inventory_ui: InventoryUI
 
 func _ready() -> void:
 	Log.info("Simmo starting (Godot %s)" % Engine.get_version_info().string)
@@ -37,6 +39,11 @@ func _ready() -> void:
 	player.world = world
 	world.add_child(player)
 	world.party = [player]
+	items = Inventory.load_data()
+	if not Log.check(not items.is_empty(), "could not load %s" % Inventory.ITEMS_PATH):
+		items = {}
+	player.setup_items(items)
+	world.loot_table = items.get("loot", [])
 
 	_cam = Camera2D.new()
 	_cam.limit_left = 0
@@ -54,6 +61,11 @@ func _ready() -> void:
 	hud.player = player
 	hud.world = world
 	layer.add_child(hud)
+	inventory_ui = InventoryUI.new()
+	inventory_ui.player = player
+	layer.add_child(inventory_ui)
+	# Portal labels are colored by danger for the player's level; redraw when it changes.
+	player.stats_changed.connect(world.queue_redraw)
 
 	_debug_draw = Node2D.new()
 	_debug_draw.add_to_group("persist")
@@ -94,6 +106,9 @@ func dismiss_party() -> void:
 
 ## New map: camera limits and sky colors follow it.
 func _on_map_changed(_id: String) -> void:
+	# The party is placed after the map is built, so warn once everything has settled.
+	if hud:
+		hud.on_map_entered.call_deferred()
 	if _cam:
 		_cam.limit_right = int(world.map_w)
 		# Bottom limit keeps the ground just above the HUD bar (22 px) with some dirt showing.
@@ -163,6 +178,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		var portal := world.portal_at(player.global_position)
 		if not portal.is_empty() and player.is_on_floor():
 			world.travel(portal)
+	elif event.is_action_pressed("inventory_toggle"):
+		inventory_ui.visible = not inventory_ui.visible
+	elif event.is_action_pressed("potion_hp"):
+		player.use_and_report(player.use_best("heal_hp"))
+	elif event.is_action_pressed("potion_mp"):
+		player.use_and_report(player.use_best("heal_mp"))
 	elif event.is_action_pressed("party_toggle"):
 		if sims.is_empty():
 			summon_party()

@@ -1,0 +1,92 @@
+{
+  "_doc": "Items, loot and the starter kit. effect: heal_hp / heal_mp (amount) or xp_buff (mult, duration in s). Loot: every party kill rolls each entry of 'loot' once; min_level is the mob level needed.",
+  "inventory_slots": 24,
+  "use_cooldown": 0.5,
+  "items": {
+    "red_potion": {
+      "name": "Red Potion",
+      "kind": "potion",
+      "effect": "heal_hp",
+      "amount": 50,
+      "color": "#e04848",
+      "stack": 100,
+      "desc": "Restores 50 HP"
+    },
+    "white_potion": {
+      "name": "White Potion",
+      "kind": "potion",
+      "effect": "heal_hp",
+      "amount": 200,
+      "color": "#f2f2f2",
+      "stack": 100,
+      "desc": "Restores 200 HP"
+    },
+    "blue_potion": {
+      "name": "Blue Potion",
+      "kind": "potion",
+      "effect": "heal_mp",
+      "amount": 40,
+      "color": "#4a8be0",
+      "stack": 100,
+      "desc": "Restores 40 MP"
+    },
+    "xp_tonic": {
+      "name": "Scholar's Tonic",
+      "kind": "tonic",
+      "effect": "xp_buff",
+      "mult": 1.2,
+      "duration": 600,
+      "color": "#ffd84a",
+      "stack": 20,
+      "desc": "+20% XP for 10 min"
+    },
+    "xp_elixir": {
+      "name": "Sage's Elixir",
+      "kind": "tonic",
+      "effect": "xp_buff",
+      "mult": 1.5,
+      "duration": 600,
+      "color": "#c77dff",
+      "stack": 20,
+      "desc": "+50% XP for 10 min"
+    }
+  },
+  "loot": [
+    {
+      "item": "red_potion",
+      "chance": 0.08
+    },
+    {
+      "item": "blue_potion",
+      "chance": 0.06
+    },
+    {
+      "item": "white_potion",
+      "chance": 0.06,
+      "min_level": 12
+    },
+    {
+      "item": "xp_tonic",
+      "chance": 0.012
+    },
+    {
+      "item": "xp_elixir",
+      "chance": 0.004,
+      "min_level": 13
+    }
+  ],
+  "starter_kit": [
+    [
+      "red_potion",
+      10
+    ],
+    [
+      "blue_potion",
+      5
+    ],
+    [
+      "xp_tonic",
+      2
+    ]
+  ]
+}

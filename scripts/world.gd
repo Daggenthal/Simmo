@@ -26,6 +26,8 @@ var nav := Nav.new()
 var mobs: Array[Mob] = []
 ## Actors that travel together (the player first, then SimPlayers). Shares kill XP.
 var party: Array = []
+## Loot table from data/items.json: [{item, chance, min_level?}]. Party kills drop into the player's inventory.
+var loot_table: Array = []
 var _balance: Dictionary
 var _respawn_queue: Array = []
 var _map_root: Node2D
@@ -148,6 +150,34 @@ func _on_mob_killed(mob: Mob, attacker: Node2D) -> void:
 		return
 	attacker.kills += 1
 	award_xp(mob, attacker)
+	if attacker in party:
+		give_loot(mob)
+
+## Items a kill of `mob` drops (each loot entry rolls once).
+func roll_loot(mob: Mob) -> Array:
+	var got: Array = []
+	for e in loot_table:
+		if mob.level >= int(e.get("min_level", 0)) and randf() < float(e.chance):
+			got.append(String(e.item))
+	return got
+
+## Roll loot for a party kill and put it straight into the player's inventory.
+func give_loot(mob: Mob) -> Array:
+	var pl = party[0] if not party.is_empty() else null
+	if pl == null or not is_instance_valid(pl) or pl.get("inventory") == null:
+		return []
+	var got := roll_loot(mob)
+	var k := 0
+	for id in got:
+		var d: Dictionary = pl.inventory.def(id)
+		var at := mob.global_position + Vector2(0, -mob.size.y - 28 - k * 10)
+		if pl.inventory.add(id) > 0:
+			FloatText.spawn(mob.get_parent(), at, "+%s" % d.get("name", id), Color(d.get("color", "#ffffff")).lightened(0.2), 1.4)
+			Log.dbg("loot: %s from %s" % [id, mob.id])
+		else:
+			FloatText.spawn(mob.get_parent(), at, "Inventory full", Color("#ff6b6b"), 1.2)
+		k += 1
+	return got
 
 ## Split a kill's XP: every party member on the map gets a share (if the killer is in the party),
 ## each adjusted for their own level against the mob's.
@@ -163,7 +193,7 @@ func award_xp(mob: Mob, killer: Node2D) -> Dictionary:
 	var scfg: Dictionary = _balance.get("mob_scaling", {})
 	var got := {}
 	for a in members:
-		var amount := maxi(1, int(round(float(mob.data.xp) * share * Scaling.xp_mult(int(mob.data.level), a.level, scfg))))
+		var amount := maxi(1, int(round(float(mob.data.xp) * share * Scaling.xp_mult(int(mob.data.level), a.level, scfg) * a.xp_mult())))
 		a.gain_xp(amount)
 		got[a] = amount
 	# Show what the player got (or the killer, when the player isn't around).
@@ -212,6 +242,32 @@ func _do_travel(portal: Dictionary) -> void:
 			a.arrive(spawn_point + Vector2(-k * 14.0 * (1.0 if spawn_point.x > map_w / 2.0 else -1.0), 0))
 			k += 1
 	Log.ok("Entered %s (Lv %d-%d)" % [map.name, map.levels[0], map.levels[1]])
+	var d := danger(map_id, _player_level())
+	if d != "":
+		Log.warn("%s: mobs here are Lv %d-%d and you're Lv %d, expect a %s fight" % [map.name, map.levels[0], map.levels[1], _player_level(), "very hard" if d == "deadly" else "harder"])
+
+## How dangerous map `id` is for a player of `player_level`: "" (fine), "hard" (under the
+## map's minimum level) or "deadly" (map_warning.deadly_gap or more levels under it).
+## Only a warning: portals never block travel.
+func danger(id: String, player_level: int) -> String:
+	var lv: Array = maps.get(id, {}).get("levels", [])
+	if lv.size() != 2:
+		return ""
+	var gap := int(lv[0]) - player_level
+	if gap >= int(_balance.get("map_warning", {}).get("deadly_gap", 5)):
+		return "deadly"
+	return "hard" if gap > 0 else ""
+
+static func danger_color(d: String) -> Color:
+	match d:
+		"deadly":
+			return Color("#ff5a5a")
+		"hard":
+			return Color("#ffb347")
+	return Color("#e8f3ff")
+
+func _player_level() -> int:
+	return party[0].level if not party.is_empty() and is_instance_valid(party[0]) else 1
 
 func level_label() -> String:
 	var lv: Array = map.get("levels", [])
@@ -243,11 +299,17 @@ func _draw_portal(p: Dictionary) -> void:
 	var dest: Dictionary = maps.get(String(p.to), {})
 	if dest.is_empty() or _font == null:
 		return
-	var label := "%s" % dest.name
-	var w := _font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
-	var pos := c + Vector2(-w / 2.0, -20)
-	draw_string_outline(_font, pos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, 3, Color(0, 0, 0, 0.7))
-	draw_string(_font, pos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("#e8f3ff"))
+	# Destination and its level range, colored by how dangerous it is for the player right now.
+	var lv: Array = dest.get("levels", [])
+	var col := danger_color(danger(String(p.to), _player_level()))
+	var lines := [String(dest.name)]
+	if lv.size() == 2:
+		lines.append("Lv %d-%d" % [lv[0], lv[1]])
+	for k in lines.size():
+		var w := _font.get_string_size(lines[k], HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+		var pos := c + Vector2(-w / 2.0, -30 + k * 10)
+		draw_string_outline(_font, pos, lines[k], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, 3, Color(0, 0, 0, 0.7))
+		draw_string(_font, pos, lines[k], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, col if k == 1 else Color("#e8f3ff"))
 
 func _draw_decor(decor: String) -> void:
 	match decor:
