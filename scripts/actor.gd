@@ -12,6 +12,8 @@ extends CharacterBody2D
 
 signal stats_changed
 signal died
+signal ultimate_used(actor: Actor, ult_name: String)
+signal leveled_up(actor: Actor, new_level: int)
 
 const LAYER_GROUND := 1
 const LAYER_PLATFORMS := 2
@@ -25,6 +27,8 @@ var hp := 50
 var max_hp := 50
 var facing := 1
 var kills := 0
+## Total damage this actor has dealt (party stats, boss DPS checks, tests).
+var damage_dealt := 0
 
 var _coyote := 0.0
 var _jump_buffer := 0.0
@@ -55,11 +59,97 @@ var brain: Brain
 var display_name := ""
 var tag_color := Color.WHITE
 var look: Dictionary = {}
+var doll: Doll
+## True once a look was chosen on purpose (character creator, Simmo roster), so classes don't overwrite it.
+var custom_look := false
 ## Who a support spell (heal) lands on; set by the brain before casting.
 var spell_target: Node2D = null
 var heals_done := 0
 ## Timed effects, e.g. "xp": {mult, t, max_t, name, color}. XP buffs of one kind don't stack.
 var buffs: Dictionary = {}
+# Items: every actor has a bag (the player's starter kit, sims' sim_kit).
+var inventory: Inventory
+var item_cfg: Dictionary = {}
+var items_used := 0
+var _item_cd := 0.0
+## Name of the map auto-battle is heading to, or "" (shown on the HUD).
+var advancing_to := ""
+
+## items: data/items.json. Fills the bag with `kit` ([[item, count], ...]; the starter kit by default).
+func setup_items(items: Dictionary, kit = null) -> void:
+	item_cfg = items
+	inventory = Inventory.new(items.get("items", {}), int(items.get("inventory_slots", 24)))
+	for e in (kit if kit != null else items.get("starter_kit", [])):
+		inventory.add(String(e[0]), int(e[1]))
+
+## Use one of item `id`. Returns "" on success, or why it couldn't be used.
+func use_item(id: String) -> String:
+	if inventory == null or inventory.count(id) <= 0:
+		return "None left"
+	if _item_cd > 0.0:
+		return "Not yet"
+	if hp <= 0:
+		return "Can't use that now"
+	var d: Dictionary = inventory.def(id)
+	match String(d.get("effect", "")):
+		"heal_hp":
+			if hp >= max_hp:
+				return "HP is full"
+			heal(int(d.amount))
+		"heal_mp":
+			if mp >= max_mp:
+				return "MP is full"
+			var before := mp
+			mp = minf(mp + float(d.amount), max_mp)
+			FloatText.spawn(get_parent(), global_position + Vector2(0, -H - 4), "+%d MP" % int(mp - before), Color("#7fb3ff"))
+		"xp_buff":
+			var cur: Dictionary = buffs.get("xp", {})
+			if not cur.is_empty() and float(cur.mult) > float(d.mult):
+				return "A stronger XP buff is active"
+			buffs["xp"] = {"mult": float(d.mult), "t": float(d.duration), "max_t": float(d.duration), "name": String(d.name), "color": String(d.color)}
+			FloatText.spawn(get_parent(), global_position + Vector2(0, -H - 14), "XP +%d%%" % int(round((float(d.mult) - 1.0) * 100.0)), Color(d.color), 1.4)
+			Log.ok("%s: %s" % [d.name, d.desc])
+		_:
+			return "Can't use that"
+	inventory.remove(id)
+	items_used += 1
+	sfx("potion", 0.8)
+	_item_cd = float(item_cfg.get("use_cooldown", 0.5))
+	stats_changed.emit()
+	return ""
+
+## Use the best owned item with `effect` (heal_hp / heal_mp): the smallest one that covers
+## what's missing, or the biggest when none does. Returns "" on success or the reason.
+func use_best(effect: String) -> String:
+	var id := best_item(effect)
+	if id == "":
+		return "No potions"
+	return use_item(id)
+
+func best_item(effect: String) -> String:
+	if inventory == null:
+		return ""
+	var missing := float(max_hp - hp) if effect == "heal_hp" else max_mp - mp
+	var best := ""
+	var best_amt := 0.0
+	for id in inventory.defs:
+		var d: Dictionary = inventory.defs[id]
+		if String(d.get("effect", "")) != effect or inventory.count(id) <= 0:
+			continue
+		var amt := float(d.get("amount", 0))
+		var better: bool = best == "" \
+			or (amt >= missing and (best_amt < missing or amt < best_amt)) \
+			or (amt < missing and best_amt < missing and amt > best_amt)
+		if better:
+			best = id
+			best_amt = amt
+	return best
+
+## Manual use: show why it didn't work over the player's head.
+func use_and_report(result: String) -> void:
+	if result != "":
+		FloatText.spawn(get_parent(), global_position + Vector2(0, -H - 10), result, Color("#c8c8c8"), 0.9)
+
 ## The intent used this frame (debug overlay and tests).
 var last_intent: Dictionary = {}
 var _font: Font
@@ -76,10 +166,32 @@ var stat_effects: Dictionary = {}
 var _spell_table: Dictionary = {}
 # Charge (dash skill) in progress
 var _dash_t := 0.0
+# Ultimate (60 s cooldown): channel first, then release. Shadow Dance blinks through a queue of mobs.
+var ult: Dictionary = {}
+var ult_id := ""
+var ult_cd := 0.0
+var ults_used := 0
+var _channel_t := 0.0
+var _channel_len := 0.0
+var _shadow_queue: Array = []
+var _shadow_t := 0.0
+var _shadow_home := Vector2.ZERO
+var _regen_acc := 0.0
+# Speech bubble over the head when a Simmo talks in party chat.
+var bubble_text := ""
+var _step_t := 0.0
+var _was_on_floor := true
+var _bubble_t := 0.0
+# Zone warp: frozen in place while the rings play; the body fades out (leaving) or in (arriving).
+var _warp_t := 0.0
+var _warp_len := 1.0
+var _warp_in := false
 var _dash_sp: Dictionary = {}
 var _dash_hit: Array = []
 var _classes: Dictionary = {}
 var _balance: Dictionary = {}
+## Worn gear by slot ("weapon", "ring", "amulet"); {} when empty. See Gear for the item format.
+var equipment := {"weapon": {}, "ring": {}, "amulet": {}}
 
 func setup(config: Dictionary, spawn: Vector2, weapon_table: Dictionary = {}, spell_table: Dictionary = {}) -> void:
 	cfg = config
@@ -87,6 +199,7 @@ func setup(config: Dictionary, spawn: Vector2, weapon_table: Dictionary = {}, sp
 	weapons = weapon_table
 	allowed_weapons = weapons.keys()
 	look = cfg.get("look", {})
+	doll = Doll.new(look)
 	_spawn_point = spawn
 	position = spawn
 	brain = Brain.new(self)
@@ -108,9 +221,12 @@ func set_class(balance: Dictionary, id: String, weapon_id := "", skill_ids: Arra
 	class_id = id
 	class_cfg = _classes[id]
 	allowed_weapons = class_cfg.get("weapons", [])
-	if look.is_empty() or display_name == "":
+	# Class looks are defaults; a look from the character creator (or a Simmo's own) wins.
+	if not custom_look:
 		look = class_cfg.get("look", look)
+	set_look(look)
 	_set_spells(skill_ids if not skill_ids.is_empty() else class_cfg.get("spells", []))
+	set_ultimate(String(class_cfg.get("ultimate", "")))
 	_set_weapon(weapon_id if weapon_id != "" else String(allowed_weapons[0]))
 	for k in STATS:
 		base_stats[k] = int(class_cfg.get("stats", {}).get(k, 4))
@@ -122,6 +238,19 @@ func set_class(balance: Dictionary, id: String, weapon_id := "", skill_ids: Arra
 	hp = max_hp
 	mp = max_mp
 	stats_changed.emit()
+
+## Change how this actor looks (character creator, class defaults).
+func set_look(lk: Dictionary) -> void:
+	look = Doll.normalize(lk)
+	if doll == null:
+		doll = Doll.new(look)
+	else:
+		doll.set_look(look)
+
+func set_ultimate(id: String) -> void:
+	ult_id = id
+	ult = _spell_table.get(id, {})
+	ult_cd = 0.0
 
 func class_name_label() -> String:
 	return String(class_cfg.get("name", class_id.capitalize()))
@@ -180,23 +309,60 @@ func add_stat(k: String) -> bool:
 	stats_changed.emit()
 	return true
 
+## A stat including worn gear.
+func stat(k: String) -> int:
+	return int(stats.get(k, 0)) + int(gear_mod(k))
+
+## Sum of one mod over all worn gear.
+func gear_mod(key: String) -> float:
+	var v := 0.0
+	for slot in equipment:
+		var it: Dictionary = equipment[slot]
+		if not it.is_empty():
+			v += float(it.get("mods", {}).get(key, 0))
+	return v
+
 func _effect(kind: String) -> float:
 	var total := 0.0
 	for k in STATS:
-		total += float(stat_effects.get(k, {}).get(kind, 0.0)) * stats[k]
+		total += float(stat_effects.get(k, {}).get(kind, 0.0)) * stat(k)
 	return total
+
+## Wear the gear in inventory slot k. Returns "" or why not. What was worn goes back to the bag.
+func equip_slot(k: int) -> String:
+	if inventory == null or inventory.slots[k] == null or not inventory.slots[k].has("item"):
+		return "Nothing to equip"
+	var it: Dictionary = inventory.slots[k].item
+	if String(it.get("kind", "")) != "gear":
+		return "Can't equip junk"
+	if String(it.slot) == "weapon" and not String(it.weapon) in allowed_weapons:
+		var owner := class_for_weapon(String(it.weapon))
+		return "Only %ss can use that" % String(_classes.get(owner, {}).get("name", "other class"))
+	inventory.take_slot(k)
+	var old: Dictionary = equipment[String(it.slot)]
+	equipment[String(it.slot)] = it
+	if not old.is_empty():
+		inventory.slots[k] = {"id": "item", "count": 1, "item": old}
+	if String(it.slot) == "weapon":
+		_set_weapon(String(it.weapon))
+	var hp_frac := float(hp) / maxf(max_hp, 1)
+	recalc()
+	hp = maxi(1, int(round(max_hp * hp_frac)))
+	sfx("ui_click")
+	stats_changed.emit()
+	return ""
 
 ## Max HP / MP from level, class multipliers and STR / INT. Keeps current HP and MP where they fit.
 func recalc() -> void:
 	var hp_mult := float(class_cfg.get("hp_mult", 1.0))
 	var mp_mult := float(class_cfg.get("mp_mult", 1.0))
-	max_hp = int(round((float(cfg.max_hp) + float(cfg.hp_per_level) * (level - 1)) * hp_mult + _effect("hp")))
-	max_mp = int(round((float(cfg.get("max_mp", 40)) + float(cfg.get("mp_per_level", 0)) * (level - 1)) * mp_mult + _effect("mp")))
+	max_hp = int(round((float(cfg.max_hp) + float(cfg.hp_per_level) * (level - 1)) * hp_mult + _effect("hp") + gear_mod("hp")))
+	max_mp = int(round((float(cfg.get("max_mp", 40)) + float(cfg.get("mp_per_level", 0)) * (level - 1)) * mp_mult + _effect("mp") + gear_mod("mp")))
 	hp = mini(hp, max_hp)
 	mp = minf(mp, max_mp)
 
 func crit_chance() -> float:
-	return float(cfg.crit_chance) + _effect("crit")
+	return float(cfg.crit_chance) + _effect("crit") + gear_mod("crit") / 100.0
 
 ## Loot chance multiplier from LUK.
 func drop_mult() -> float:
@@ -254,12 +420,24 @@ func _physics_process(delta: float) -> void:
 			set_collision_mask_value(LAYER_PLATFORMS, true)
 
 	_tick_buffs(delta)
+	_item_cd = maxf(_item_cd - delta, 0.0)
+	ult_cd = maxf(ult_cd - delta, 0.0)
+	_bubble_t = maxf(_bubble_t - delta, 0.0)
 	var intent := _get_intent(delta)
+	if _warp_t > 0.0 or (not _warp_in and _warp_len > 0.0 and self_modulate.a <= 0.01):
+		intent = blank_intent()
+		_tick_warp(delta)
+	elif _channel_t > 0.0 or not _shadow_queue.is_empty():
+		# Channeling or mid Shadow Dance: no moving, attacking or casting.
+		intent = blank_intent()
+		_tick_ultimate(delta)
 	last_intent = intent
 	_apply(intent, delta)
 	if _dash_t > 0.0:
 		_dash_step(delta)
 	move_and_slide()
+	_footsteps(delta)
+	doll.update(delta, global_position, velocity, is_on_floor(), facing)
 	queue_redraw()
 
 ## This frame's intent. Base actors are always brain-driven.
@@ -287,8 +465,12 @@ func _apply(i: Dictionary, delta: float) -> void:
 		velocity.y = min(velocity.y + float(cfg.gravity) * delta, float(cfg.max_fall))
 
 	var control := 1.0 if is_on_floor() else float(cfg.air_control)
+	var top_speed := float(cfg.speed)
+	# Wading through a pond is slower.
+	if world and is_on_floor() and absf(global_position.y - world.ground_y) < 4.0 and world.water_kind_at(global_position.x) == "pond":
+		top_speed *= float(world._balance.get("environment", {}).get("pond_speed", 0.65))
 	if dir != 0.0:
-		velocity.x = move_toward(velocity.x, dir * float(cfg.speed), float(cfg.accel) * control * delta)
+		velocity.x = move_toward(velocity.x, dir * top_speed, float(cfg.accel) * control * delta)
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, float(cfg.friction) * control * delta)
 
@@ -305,11 +487,200 @@ func _apply(i: Dictionary, delta: float) -> void:
 	if i.jump_release and velocity.y < 0.0:
 		velocity.y *= 0.5
 
+	if i.get("ult", false):
+		cast_ultimate()
 	# Spells first: a cast locks out the weapon for the global cooldown, so they can't fire together.
 	if i.get("spell", "") != "":
 		cast(i.spell)
 	if i.attack and _attack_cd <= 0.0:
 		attack()
+
+## Start a zone warp: rings play for `duration`; leaving fades the body out, arriving fades it in.
+func start_warp(duration: float, arriving: bool, col: Color) -> void:
+	_warp_t = duration
+	_warp_len = duration
+	_warp_in = arriving
+	_invuln = maxf(_invuln, duration)
+	velocity = Vector2.ZERO
+	self_modulate.a = 0.0 if arriving else 1.0
+	Fx.warp(self, duration, arriving, col)
+
+func is_warping() -> bool:
+	return _warp_t > 0.0
+
+func _tick_warp(delta: float) -> void:
+	velocity.x = 0.0
+	if _warp_t <= 0.0:
+		return
+	_warp_t = maxf(_warp_t - delta, 0.0)
+	var t := 1.0 - _warp_t / _warp_len
+	# Leaving: visible for the first half, then dissolve. Arriving: materialize over the first 60%.
+	self_modulate.a = clampf(t / 0.6, 0.0, 1.0) if _warp_in else clampf(1.0 - (t - 0.5) / 0.45, 0.0, 1.0)
+	if _warp_t <= 0.0 and _warp_in:
+		self_modulate.a = 1.0
+		_warp_len = 0.0
+
+## Show `text` in a bubble over the head for a few seconds (party chat lines).
+func say(text: String, seconds := 4.0) -> void:
+	bubble_text = text
+	_bubble_t = seconds
+
+## Sound from this actor: full volume for the player, quieter for everyone else.
+func sfx(sound: String, volume := 1.0, pitch := 1.0) -> void:
+	Sfx.play(sound, volume * (1.0 if is_in_group("player") else 0.25), pitch)
+
+## Steps while walking on the ground, a hop when leaving it, a thud when landing.
+func _footsteps(delta: float) -> void:
+	var on_floor := is_on_floor()
+	if on_floor and not _was_on_floor and velocity.y >= 0.0:
+		sfx("land", 0.6)
+	elif not on_floor and _was_on_floor and velocity.y < -100.0:
+		sfx("jump", 0.5)
+	_was_on_floor = on_floor
+	if on_floor and absf(velocity.x) > 30.0:
+		_step_t -= delta
+		if _step_t <= 0.0:
+			_step_t = 0.28
+			sfx("step", 0.45, randf_range(0.85, 1.15))
+	else:
+		_step_t = 0.0
+
+func can_ultimate() -> bool:
+	return not ult.is_empty() and ult_cd <= 0.0 and mp >= float(ult.get("mp", 0)) and _channel_t <= 0.0 and _shadow_queue.is_empty()
+
+## Start the ultimate: a short channel, then _release_ultimate. Returns true if it started.
+func cast_ultimate() -> bool:
+	if not can_ultimate():
+		return false
+	mp -= float(ult.get("mp", 0))
+	ult_cd = float(ult.cooldown)
+	ults_used += 1
+	_channel_len = maxf(float(ult.get("cast_time", 0.3)), 0.05)
+	_channel_t = _channel_len
+	velocity.x = 0.0
+	if String(ult.ult) == "quake":
+		velocity.y = -220.0  # the leap
+	ultimate_used.emit(self, String(ult.name))
+	sfx("ultimate")
+	Log.ok("%s: %s!" % ["You" if is_in_group("player") else display_name, ult.name])
+	stats_changed.emit()
+	return true
+
+func _tick_ultimate(delta: float) -> void:
+	velocity.x = move_toward(velocity.x, 0.0, 600.0 * delta)
+	if _channel_t > 0.0:
+		_channel_t -= delta
+		if _channel_t <= 0.0:
+			_release_ultimate()
+		return
+	_shadow_t -= delta
+	if _shadow_t <= 0.0:
+		_shadow_step()
+
+func _release_ultimate() -> void:
+	var col := Color(ult.color)
+	if is_in_group("player"):
+		var hud := get_tree().get_first_node_in_group("hud")
+		if hud:
+			hud.flash(col.lightened(0.4), 0.5)
+	match String(ult.ult):
+		"cataclysm":
+			_ult_cataclysm()
+		"quake":
+			_ult_quake()
+		"shadow":
+			_ult_shadow_start()
+		"sanctuary":
+			_ult_sanctuary()
+
+## Mage: a fire blast in a wide cone in front, then lightning from the sky on every mob on the map.
+func _ult_cataclysm() -> void:
+	var from := global_position + Vector2(facing * 8, -12)
+	var dir := Vector2(facing, 0)
+	var length := float(ult.cone_range)
+	var half := float(ult.cone_angle)
+	Fx.cone(get_parent(), from, dir, length, half, Combat.element_color("fire"))
+	var cone_w := {"damage_min": ult.cone_damage_min, "damage_max": ult.cone_damage_max, "cooldown": ult.cooldown, "scale_cooldown": ult.scale_cooldown, "stat": "int", "kind": "ultimate"}
+	var k := 0
+	for m in get_tree().get_nodes_in_group("mobs"):
+		if not m.alive:
+			continue
+		var to: Vector2 = m.global_position + Vector2(0, -m.size.y / 2.0) - from
+		if to.length() <= length and absf(dir.angle_to(to)) <= half:
+			Combat.hit(m, self, roll_base_damage(cone_w), "fire", _hit_opts(160.0))
+	# Sky strikes land one after another for a rolling wipe across the map.
+	for m in get_tree().get_nodes_in_group("mobs"):
+		if not m.alive:
+			continue
+		var delay := 0.05 + 0.035 * k
+		k += 1
+		get_tree().create_timer(delay, false, true).timeout.connect(func() -> void:
+			if is_instance_valid(m) and m.alive and is_instance_valid(self):
+				var top: Vector2 = m.global_position + Vector2(randf_range(-20, 20), -260)
+				Fx.lightning(m.get_parent(), top, m.global_position + Vector2(0, -m.size.y / 2.0), Color(ult.color))
+				Fx.burst(m.get_parent(), m.global_position + Vector2(0, -m.size.y / 2.0), 14.0, Color(ult.color))
+				Combat.hit(m, self, roll_base_damage(ult), "lightning", _hit_opts(60.0)))
+
+## Warrior: quake that hits and stuns every mob nearby on your level, then Berserk.
+func _ult_quake() -> void:
+	var r := float(ult.radius)
+	Fx.burst(get_parent(), global_position, r * 0.5, Color(ult.color))
+	Fx.burst(get_parent(), global_position, r, Color(ult.color).darkened(0.2))
+	for m in get_tree().get_nodes_in_group("mobs"):
+		if m.alive and absf(m.global_position.x - global_position.x) <= r and absf(m.global_position.y - global_position.y) < 40.0:
+			var o := _hit_opts(0.0)
+			Combat.hit(m, self, roll_base_damage(ult), "physical", o)
+			if m.alive:
+				m.apply_stun(float(ult.stun))
+	buffs["berserk"] = {"name": "Berserk", "t": float(ult.berserk_time), "max_t": float(ult.berserk_time), "color": String(ult.color),
+		"dmg_mult": float(ult.berserk_mult), "label": "+%d%% damage" % int(round((float(ult.berserk_mult) - 1.0) * 100.0))}
+
+## Rogue: vanish, then blink to up to N nearby mobs (closest first), striking each a few times.
+func _ult_shadow_start() -> void:
+	_shadow_home = global_position
+	var near: Array = []
+	for m in get_tree().get_nodes_in_group("mobs"):
+		if m.alive and m.global_position.distance_to(global_position) <= float(ult.range):
+			near.append(m)
+	near.sort_custom(func(a, b): return a.global_position.distance_to(global_position) < b.global_position.distance_to(global_position))
+	_shadow_queue = near.slice(0, int(ult.targets))
+	_shadow_queue.append(null)  # last step: back home
+	_shadow_t = 0.0
+	modulate = Color(0.55, 0.45, 1.0, 0.55)
+	_invuln = maxf(_invuln, float(ult.step_time) * _shadow_queue.size() + 0.3)
+
+func _shadow_step() -> void:
+	_shadow_t = float(ult.step_time)
+	var m = _shadow_queue.pop_front()
+	Fx.afterimage(get_parent(), global_position, Color(ult.color))
+	if m == null or not is_instance_valid(m):
+		global_position = _shadow_home
+		velocity = Vector2.ZERO
+		modulate = Color.WHITE
+		_shadow_queue.clear()
+		return
+	if not m.alive:
+		return
+	var side := -1.0 if randf() < 0.5 else 1.0
+	global_position = Vector2(m.global_position.x + side * (m.size.x / 2.0 + 8.0), m.global_position.y)
+	velocity = Vector2.ZERO
+	facing = 1 if m.global_position.x >= global_position.x else -1
+	_swing_time = 0.12
+	_swing_len = 0.12
+	for h in int(ult.hits):
+		if m.alive:
+			Combat.hit(m, self, roll_base_damage(ult), "physical", _hit_opts(0.0))
+
+## Healer: full heal for the party plus a few seconds of regeneration.
+func _ult_sanctuary() -> void:
+	Fx.burst(get_parent(), global_position + Vector2(0, -12), 70.0, Color(ult.color))
+	var party: Array = world.party if world else [self]
+	for m in party:
+		if is_instance_valid(m) and m.is_inside_tree() and m.is_alive():
+			m.heal(m.max_hp)
+			m.buffs["sanctuary"] = {"name": "Sanctuary", "t": float(ult.regen_time), "max_t": float(ult.regen_time), "color": String(ult.color),
+				"regen": float(ult.regen), "label": "+%d HP/s" % int(ult.regen)}
+			Fx.burst(m.get_parent(), m.global_position + Vector2(0, -12), 18.0, Color(ult.color))
 
 func can_cast(id: String) -> bool:
 	if not spells.has(id):
@@ -333,6 +704,11 @@ func cast(id: String) -> bool:
 		cast_log.pop_front()
 	_swing_time = 0.18
 	_swing_len = 0.18
+	var cast_sound := "cast_%s" % String(sp.element)
+	if Sfx.has_method("_gen_" + cast_sound):
+		sfx(cast_sound, 0.7)
+	else:
+		sfx("swing", 0.8, 0.8)
 	if String(sp.kind) == "heal":
 		_cast_heal(sp)
 		stats_changed.emit()
@@ -379,7 +755,7 @@ func cast(id: String) -> bool:
 				pr.look = "glob"
 				pr.gravity = float(sp.gravity)
 				pr.splash = float(sp.get("splash", 0.0))
-				var aim_at := target.global_position + Vector2(0, -target.size.y / 2.0) if target else from + Vector2(facing * float(sp.range) * 0.7, 16)
+				var aim_at := lead(from, target, float(sp.speed)) if target else from + Vector2(facing * float(sp.range) * 0.7, 16)
 				pr.velocity = Projectile.lob_velocity(from, aim_at, float(sp.speed), pr.gravity)
 				pr.ground_y = (target.global_position.y if target else global_position.y) + 2.0
 				pr.max_life = 2.5
@@ -466,7 +842,7 @@ func _cast_volley(sp: Dictionary, target: Mob, from: Vector2) -> void:
 	var g := float(sp.gravity)
 	for k in int(sp.count):
 		var pr := Projectile.new()
-		var aim := target.global_position + Vector2(0, -target.size.y / 2.0) if target else from + Vector2(facing * float(sp.range) * 0.6, 10)
+		var aim := lead(from, target, float(sp.throw_speed)) if target else from + Vector2(facing * float(sp.range) * 0.6, 10)
 		pr.velocity = Projectile.lob_velocity(from, aim, float(sp.throw_speed) * (1.0 + 0.12 * k), g)
 		pr.ground_y = (target.global_position.y if target else global_position.y) + 2.0
 		pr.gravity = g
@@ -556,6 +932,7 @@ func attack() -> void:
 	_swing_time = _swing_len
 	_pending_hit = float(weapon.windup) * scale
 	swings += 1
+	sfx("swing", 0.5, randf_range(0.9, 1.15) * (0.8 if float(weapon.cooldown) > 1.0 else 1.0))
 	if _pending_hit <= 0.0:
 		_land_attack()
 
@@ -592,7 +969,7 @@ func _throw() -> void:
 	var target := _aim_target(float(weapon.range))
 	var pr := Projectile.new()
 	if target:
-		pr.velocity = Projectile.lob_velocity(from, target.global_position + Vector2(0, -target.size.y / 2.0), spd, g)
+		pr.velocity = Projectile.lob_velocity(from, lead(from, target, spd), spd, g)
 		pr.ground_y = target.global_position.y + 2.0
 	else:
 		pr.velocity = Vector2(facing * spd, -150.0)
@@ -614,6 +991,15 @@ func _throw() -> void:
 	get_parent().add_child(pr)
 	pr.global_position = from
 	last_projectile = pr
+
+## Where to aim a slow arcing shot at `t` so it lands where the target will be (its middle, led by
+## its walking speed over the flight time). Kept on its platform, so a lead never aims off a ledge.
+func lead(from: Vector2, t: Mob, speed: float) -> Vector2:
+	var aim := t.global_position + Vector2(0, -t.size.y / 2.0)
+	var flight := absf(aim.x - from.x) / maxf(speed, 1.0)
+	var ahead := clampf(t.velocity.x * flight, -60.0, 60.0)
+	aim.x = clampf(aim.x + ahead, t.bound_x0, t.bound_x1) if t.bound_x0 > -INF else aim.x + ahead
+	return aim
 
 ## Mob to aim at: the auto target if in range, else the nearest live mob in front.
 func _aim_target(max_range: float) -> Mob:
@@ -666,14 +1052,14 @@ func equip(weapon_id: String) -> String:
 ## times damage_per_point, scaled by cooldown so slow hits keep up per hit.
 func damage_bonus(w: Dictionary) -> float:
 	var k := String(w.get("stat", "str"))
-	var pts := float(int(stats.get(k, 0)) - int(base_stats.get(k, 0)))
-	return pts * float(cfg.damage_per_point) * float(w.cooldown) / float(cfg.level_bonus_reference_cooldown)
+	var pts := float(stat(k) - int(base_stats.get(k, 0)))
+	return pts * float(cfg.damage_per_point) * float(w.get("scale_cooldown", w.cooldown)) / float(cfg.level_bonus_reference_cooldown)
 
 ## Base damage for one hit with weapon or spell `w` (no crit; Combat rolls crits).
 ## INT spells cast while holding a staff get its spell_power.
 func roll_base_damage(w: Dictionary) -> int:
 	var bonus := damage_bonus(w)
-	var mult := buff_dmg_mult()
+	var mult := buff_dmg_mult() * (1.0 + gear_mod("damage") / 100.0)
 	if w.has("kind") and String(w.get("stat", "")) == "int":
 		mult *= float(weapon.get("spell_power", 1.0))
 	return int(round(randi_range(int(w.damage_min + bonus), int(w.damage_max + bonus)) * mult))
@@ -682,6 +1068,7 @@ func roll_base_damage(w: Dictionary) -> int:
 func damage_range(w: Dictionary) -> Vector2i:
 	var bonus := damage_bonus(w)
 	var mult := float(weapon.get("spell_power", 1.0)) if w.has("kind") and String(w.get("stat", "")) == "int" else 1.0
+	mult *= buff_dmg_mult() * (1.0 + gear_mod("damage") / 100.0)
 	return Vector2i(int(round((float(w.damage_min) + bonus) * mult)), int(round((float(w.damage_max) + bonus) * mult)))
 
 ## Average damage per second at the current level and stats, crits included.
@@ -695,6 +1082,7 @@ func take_damage(amount: int, from_x: float) -> void:
 		return
 	hp = max(hp - amount, 0)
 	_invuln = float(cfg.invuln_time)
+	sfx("player_hurt", 0.8)
 	velocity = Vector2(sign(global_position.x - from_x) * 140.0, -150.0)
 	FloatText.spawn(get_parent(), global_position + Vector2(0, -H - 4), str(amount), Color("#ff6b6b"))
 	stats_changed.emit()
@@ -703,7 +1091,7 @@ func take_damage(amount: int, from_x: float) -> void:
 
 ## Out of HP. The player respawns at the map's spawn point; SimPlayer overrides this.
 func _on_death() -> void:
-	Log.warn("%s died at level %d, respawning" % [display_name if display_name != "" else "Player", level])
+	Log.warn("%s died at level %d, respawning" % [display_name if display_name != "" else "You", level])
 	died.emit()
 	_respawn()
 
@@ -720,6 +1108,8 @@ func _respawn() -> void:
 func arrive(pos: Vector2) -> void:
 	position = pos
 	velocity = Vector2.ZERO
+	_warp_t = 0.0
+	self_modulate.a = 1.0
 	_spawn_point = pos
 	_nav_reset()
 	brain.reset()
@@ -730,6 +1120,11 @@ func _nav_reset() -> void:
 
 func _tick_buffs(delta: float) -> void:
 	for k in buffs.keys():
+		if buffs[k].has("regen"):
+			_regen_acc += float(buffs[k].regen) * delta
+			if _regen_acc >= 1.0 and hp > 0:
+				hp = mini(hp + int(_regen_acc), max_hp)
+				_regen_acc -= int(_regen_acc)
 		buffs[k].t -= delta
 		if buffs[k].t <= 0.0:
 			Log.info("%s wore off" % buffs[k].name)
@@ -754,7 +1149,9 @@ func gain_xp(amount: int) -> void:
 		recalc()
 		hp = max_hp
 		mp = max_mp
-		Log.ok("%s Now level %d" % ["Level up!" if display_name == "" else display_name + " leveled up!", level])
+		leveled_up.emit(self, level)
+		sfx("level_up")
+		Log.ok("%s Now level %d" % ["Level up!" if is_in_group("player") else display_name + " leveled up!", level])
 		FloatText.spawn(get_parent(), global_position + Vector2(0, -H - 14), "LEVEL UP!", Color("#ffd84a"), 1.6)
 	stats_changed.emit()
 
@@ -764,7 +1161,8 @@ func _draw() -> void:
 	# Blink while invulnerable.
 	if _invuln > 0.0 and int(_invuln * 12) % 2 == 0:
 		return
-	draw_doll(self, look, facing)
+	if _channel_t > 0.0:
+		_draw_channel()
 	# Weapon: idle on the shoulder, swings an arc when attacking.
 	var hand := Vector2(facing * 6, -11)
 	var length := float(weapon.length)
@@ -792,8 +1190,62 @@ func _draw() -> void:
 		tip = hand + Vector2(facing * length, 0).rotated(angle)
 	else:
 		tip = hand + Vector2(facing * length * 0.35, -length * 0.85)
+	doll.draw(self, hand)
 	draw_weapon_shape(self, weapon_key, weapon, hand, tip)
+	doll.draw_hand(self, hand)
 	_draw_tag()
+	_draw_bubble()
+
+## Ultimate channel: a magic circle that grows under the feet, runes turning, sparks rising.
+func _draw_channel() -> void:
+	var col := Color(ult.get("color", "#ffffff"))
+	var t := 1.0 - _channel_t / _channel_len
+	var r := 8.0 + 22.0 * t
+	var spin := Time.get_ticks_msec() / 300.0
+	draw_set_transform(Vector2(0, 0), 0.0, Vector2(1.0, 0.35))
+	draw_arc(Vector2.ZERO, r, 0, TAU, 32, Color(col, 0.9), 2.0)
+	draw_arc(Vector2.ZERO, r * 0.7, spin, spin + PI * 1.5, 24, Color(col.lightened(0.3), 0.8), 1.5)
+	for k in 6:
+		var a := spin * 0.6 + k * TAU / 6.0
+		draw_rect(Rect2(Vector2(cos(a), sin(a)) * r - Vector2(1.5, 1.5), Vector2(3, 3)), col.lightened(0.5))
+	draw_set_transform(Vector2.ZERO)
+	for k in 5:
+		var ph := fmod(t * 3.0 + k * 0.2, 1.0)
+		draw_rect(Rect2(Vector2(-10 + k * 5, -ph * 34.0), Vector2(2, 2)), Color(col.lightened(0.4), 1.0 - ph))
+	draw_circle(Vector2(facing * 8, -14), 3.0 + 3.0 * t, Color(col, 0.6))
+
+## Speech bubble: white box over the head, wrapped to two lines, fading out at the end.
+func _draw_bubble() -> void:
+	if _bubble_t <= 0.0 or bubble_text == "" or _font == null:
+		return
+	# Stack over neighbors who are talking too, so bubbles don't cover each other.
+	var stack := 0
+	for o in get_tree().get_nodes_in_group("actors"):
+		if o != self and o._bubble_t > 0.0 and absf(o.global_position.x - global_position.x) < 70.0 and o.get_instance_id() < get_instance_id():
+			stack += 1
+	var a := clampf(_bubble_t / 0.4, 0.0, 1.0)
+	var max_w := 96.0
+	var words := bubble_text.split(" ")
+	var lines: Array = [""]
+	for w in words:
+		var test: String = w if lines[-1] == "" else lines[-1] + " " + w
+		if _font.get_string_size(test, HORIZONTAL_ALIGNMENT_LEFT, -1, 7).x > max_w and lines[-1] != "":
+			if lines.size() == 2:
+				lines[-1] += "..."
+				break
+			lines.append(w)
+		else:
+			lines[-1] = test
+	var w := 0.0
+	for l in lines:
+		w = maxf(w, _font.get_string_size(l, HORIZONTAL_ALIGNMENT_LEFT, -1, 7).x)
+	var h := lines.size() * 9.0 + 4.0
+	var r := Rect2(-w / 2.0 - 4, -H - 14 - h - stack * (h + 3.0), w + 8, h)
+	draw_rect(r, Color(1, 1, 1, 0.92 * a))
+	draw_rect(r, Color(0.2, 0.25, 0.35, a), false, 1.0)
+	draw_colored_polygon(PackedVector2Array([Vector2(-3, r.end.y), Vector2(3, r.end.y), Vector2(0, r.end.y + 4)]), Color(1, 1, 1, 0.92 * a))
+	for k in lines.size():
+		draw_string(_font, Vector2(r.position.x + 4, r.position.y + 10 + k * 9), lines[k], HORIZONTAL_ALIGNMENT_LEFT, -1, 7, Color(0.1, 0.12, 0.2, a))
 
 ## Name tag under the feet (MapleStory style). The player has none.
 func _draw_tag() -> void:
@@ -826,41 +1278,17 @@ static func draw_weapon_shape(ci: CanvasItem, key: String, w: Dictionary, hand: 
 			var d := (tip - hand).normalized()
 			ci.draw_line(hand + d * 3 + Vector2(-d.y, d.x) * 3, hand + d * 3 - Vector2(-d.y, d.x) * 3, Color("#b08a3c"), 2.0)
 
-## Body layers (everything but the weapon) on any canvas item: actors, the class select screen.
-static func draw_doll(ci: CanvasItem, lk: Dictionary, face: int) -> void:
-	var top := -H
-	var hair := Color(lk.get("hair", "#4a3426"))
-	var style := String(lk.get("hair_style", "short"))
-	# Back hair
-	if style == "long":
-		ci.draw_rect(Rect2(-7 if face > 0 else 1, top + 1, 6, 13), hair)
-	# Legs
-	ci.draw_rect(Rect2(-5, -6, 4, 6), Color(lk.get("pants", "#3b4a6b")))
-	ci.draw_rect(Rect2(1, -6, 4, 6), Color(lk.get("pants", "#3b4a6b")))
-	# Body (shirt)
-	ci.draw_rect(Rect2(-6, -15, 12, 10), Color(lk.get("shirt", "#d9534f")))
-	# Head
-	ci.draw_circle(Vector2(0, top + 6), 6.5, Color(lk.get("skin", "#f2c27b")))
-	# Hair
-	match style:
-		"spiky":
-			for k in 4:
-				var hx := -7.0 + k * 4.0
-				ci.draw_colored_polygon(PackedVector2Array([Vector2(hx, top + 3), Vector2(hx + 2 - face, top - 4), Vector2(hx + 4, top + 3)]), hair)
-			ci.draw_rect(Rect2(-7, top, 14, 3), hair)
-		_:
-			ci.draw_rect(Rect2(-7, top - 1, 14, 4), hair)
-			ci.draw_rect(Rect2(-7 if face > 0 else 3, top - 1, 4, 7), hair)
-	# Hat
-	match String(lk.get("hat", "")):
-		"helm":
-			ci.draw_rect(Rect2(-7, top - 2, 14, 5), Color("#9aa3ad"))
-			ci.draw_rect(Rect2(-1, top - 5, 2, 3), Color("#c43b3b"))
-		"band":
-			ci.draw_rect(Rect2(-7, top + 1, 14, 2), Color("#e0e0e0"))
-			ci.draw_rect(Rect2(-face * 7 - 1, top + 1, 2, 6), Color("#e0e0e0"))
-	# Eye
-	ci.draw_rect(Rect2(face * 2 - 1, top + 5, 2, 3), Color("#1c1c1c"))
+## A preview of a doll holding weapon `key`, drawn at `at`, `zoom` times bigger (menus).
+static func draw_preview(ci: CanvasItem, d: Doll, key: String, w: Dictionary, at: Vector2, zoom: float) -> void:
+	var face := d.facing
+	var hand := Vector2(face * 6, -12)
+	d.draw(ci, hand, at, zoom)
+	if not w.is_empty():
+		ci.draw_set_transform(at, 0.0, Vector2(zoom, zoom))
+		var length := float(w.get("length", 16))
+		draw_weapon_shape(ci, key, w, hand, hand + Vector2(face * length * 0.35, -length * 0.85))
+		ci.draw_set_transform(Vector2.ZERO)
+	d.draw_hand(ci, hand, at, zoom)
 
 ## The weapon at rest on the shoulder (class select screen).
 static func draw_idle_weapon(ci: CanvasItem, key: String, w: Dictionary, face: int) -> void:

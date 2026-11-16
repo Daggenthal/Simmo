@@ -25,11 +25,18 @@ static func lob_velocity(from: Vector2, to: Vector2, speed: float, g: float) -> 
 	var vy := ((to.y - from.y) - 0.5 * g * t * t) / t
 	return Vector2(signf(dx) * speed if dx != 0.0 else speed, clampf(vy, -340.0, 60.0))
 
+var _light: PointLight2D
+
 func _ready() -> void:
 	z_index = 40
+	# Spells carry their light with them; plain kunai don't glow.
+	if element != "physical":
+		_light = Lighting.add(self, color, 70.0 if element == "fire" else 55.0, 1.0, element == "fire")
 
 func _physics_process(delta: float) -> void:
 	_life += delta
+	if _light and element == "fire":
+		_light.energy = 0.85 + 0.25 * sin(_life * 40.0) * randf()
 	_trail.push_front(global_position)
 	if _trail.size() > 6:
 		_trail.pop_back()

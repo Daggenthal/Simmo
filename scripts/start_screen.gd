@@ -16,6 +16,7 @@ var _hover := -1
 var _font: Font
 var _t := 0.0
 var _chosen := false
+var _dolls: Dictionary = {}   # class id -> Doll (animated previews)
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -25,6 +26,10 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	for id in ids:
+		if not _dolls.has(id):
+			_dolls[id] = Doll.new(balance.classes[id].get("look", {}))
+		_dolls[id].update(delta, Vector2.ZERO, Vector2.ZERO, true, 1)
 	queue_redraw()
 
 func class_id() -> String:
@@ -159,10 +164,8 @@ func _draw_card(n: int, c: Dictionary) -> void:
 	# Paper doll with the starting weapon, scaled up.
 	var weapon_id := String(c.weapons[0])
 	var bob := sin(_t * 3.0 + n) * 1.5 if sel else 0.0
-	draw_set_transform(r.position + Vector2(34, 82 + bob), 0.0, Vector2(2.5, 2.5))
-	Actor.draw_doll(self, c.get("look", {}), 1)
-	Actor.draw_idle_weapon(self, weapon_id, balance.weapons[weapon_id], 1)
-	draw_set_transform(Vector2.ZERO)
+	if _dolls.has(ids[n]):
+		Actor.draw_preview(self, _dolls[ids[n]], weapon_id, balance.weapons[weapon_id], r.position + Vector2(34, 92 + bob), 2.3)
 	var tx := r.position.x + 74
 	_str(Vector2(tx, r.position.y + 18), String(c.name), col, 12)
 	_str(Vector2(tx, r.position.y + 30), "Main stat: %s" % String(c.primary).to_upper(), Color("#ffd84a"), 8)

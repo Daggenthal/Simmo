@@ -6,6 +6,7 @@ extends Node2D
 ## Map pieces (bodies, mobs) live under one child node so a map change can drop them all.
 
 signal map_changed(map_id: String)
+signal looted(item_name: String)
 
 const MAPS_PATH := "res://data/maps.json"
 const PORTAL_REACH := 16.0
@@ -28,6 +29,14 @@ var mobs: Array[Mob] = []
 var party: Array = []
 ## Loot table from data/items.json: [{item, chance, min_level?}]. Party kills drop into the player's inventory.
 var loot_table: Array = []
+## Time of day and weather (set by main before build); the map's living parts.
+var weather: Weather
+var env: MapEnvironment
+## Zone boss: spawns after bosses.kills_to_spawn kills on this map; drops a chest.
+var kills_here := 0
+var boss: Mob = null
+var chest: Chest = null
+signal boss_spawned(boss: Mob)
 var _balance: Dictionary
 var _respawn_queue: Array = []
 var _map_root: Node2D
@@ -77,6 +86,12 @@ func load_map(id: String, arrive_portal := "") -> void:
 		_platform(Rect2(p[0], p[1], p[2], 8))
 	for s in spawns:
 		_spawn_mob(s[0], Vector2(s[1], s[2] - 1))
+	env = MapEnvironment.new()
+	env.name = "Environment"
+	env.setup(self, map, weather, _balance.get("environment", {}))
+	_map_root.add_child(env)
+	if weather:
+		weather.set_climate(String(map.get("climate", "")))
 	var pl: Dictionary = _balance.player
 	nav = Nav.new()
 	nav.build(ground_y, map_w, platforms, pow(float(pl.jump_velocity), 2) / (2.0 * float(pl.gravity)))
@@ -89,6 +104,9 @@ func load_map(id: String, arrive_portal := "") -> void:
 
 func _clear_map() -> void:
 	_respawn_queue.clear()
+	kills_here = 0
+	boss = null
+	chest = null
 	mobs.clear()
 	if _map_root:
 		remove_child(_map_root)
@@ -123,6 +141,12 @@ func _platform(r: Rect2) -> void:
 	col.one_way_collision = true
 	col.position = r.position + Vector2(r.size.x / 2.0, 2)
 	body.add_child(col)
+	# Platforms block light, so fireballs and lamps cast shadows under them.
+	var occ := LightOccluder2D.new()
+	var poly := OccluderPolygon2D.new()
+	poly.polygon = PackedVector2Array([r.position, r.position + Vector2(r.size.x, 0), r.position + Vector2(r.size.x, 6), r.position + Vector2(0, 6)])
+	occ.occluder = poly
+	body.add_child(occ)
 	_map_root.add_child(body)
 
 ## Mob data for type `mob_id` at `level` (scaled from its base level).
@@ -145,13 +169,61 @@ func _spawn_mob(mob_id: String, pos: Vector2) -> void:
 	mobs.append(mob)
 
 func _on_mob_killed(mob: Mob, attacker: Node2D) -> void:
-	_respawn_queue.append({"mob": mob, "t": float(_balance.respawn_time)})
+	if mob.is_boss:
+		_boss_down(mob)
+	else:
+		_respawn_queue.append({"mob": mob, "t": float(_balance.respawn_time)})
+		kills_here += 1
+		if kills_here >= int(_balance.get("bosses", {}).get("kills_to_spawn", 30)):
+			spawn_boss()
 	if attacker == null or not is_instance_valid(attacker) or not attacker.has_method("gain_xp"):
 		return
 	attacker.kills += 1
+	if attacker.is_in_group("player"):
+		ChatLog.add("combat", "You defeated Lv.%d %s" % [mob.level, mob.data.get("name", mob.id)])
 	award_xp(mob, attacker)
 	if attacker in party:
 		give_loot(mob)
+
+## Bring out this map's boss (no-op if it's already here or its chest is still waiting).
+func spawn_boss() -> Mob:
+	var cfg: Dictionary = _balance.get("bosses", {})
+	var spec: Dictionary = cfg.get("maps", {}).get(map_id, {})
+	if spec.is_empty() or (boss != null and is_instance_valid(boss) and boss.alive) or (chest != null and is_instance_valid(chest) and not chest.opened):
+		return boss
+	var base: Dictionary = _balance.mobs.get(String(spec.id), {})
+	var mob := Mob.new()
+	mob.setup(String(spec.id), mob_data(String(spec.id), int(base.level)), Vector2(float(spec.get("spawn_x", map_w / 2.0)), ground_y - 1), float(_balance.player.gravity))
+	mob.boss_cfg = cfg
+	mob.killed.connect(_on_mob_killed)
+	_map_root.add_child(mob)
+	mob.set_bounds(nav)
+	mobs.append(mob)
+	boss = mob
+	kills_here = 0
+	ChatLog.add("warning", "BOSS: Lv.%d %s has appeared! Beat it before it enrages." % [mob.level, mob.data.name])
+	Sfx.play("boss_roar")
+	Lighting.flash(self, mob.global_position + Vector2(0, -30), Color("#ff6a3a"), 260.0, 1.2, 1.0)
+	boss_spawned.emit(mob)
+	return mob
+
+func _boss_down(mob: Mob) -> void:
+	mobs.erase(mob)
+	boss = null
+	kills_here = 0
+	var weapons: Array = party[0].allowed_weapons if not party.is_empty() and is_instance_valid(party[0]) else []
+	chest = Chest.new()
+	chest.setup(Gear.roll_chest(mob.level, weapons), mob.level)
+	chest.position = Vector2(mob.global_position.x, ground_y if absf(mob.global_position.y - ground_y) < 40.0 else mob.global_position.y)
+	_map_root.add_child(chest)
+	ChatLog.add("system", "%s is defeated! A treasure chest appeared." % mob.data.name)
+	Sfx.play("level_up", 0.8, 0.8)
+
+## The unopened chest near feet at `pos`, or null.
+func chest_at(pos: Vector2) -> Chest:
+	if chest != null and is_instance_valid(chest) and not chest.opened and absf(chest.global_position.x - pos.x) < 20.0 and absf(chest.global_position.y - pos.y) < 16.0:
+		return chest
+	return null
 
 ## Items a kill of `mob` drops (each loot entry rolls once).
 func roll_loot(mob: Mob) -> Array:
@@ -175,9 +247,13 @@ func give_loot(mob: Mob) -> Array:
 		var at := mob.global_position + Vector2(0, -mob.size.y - 28 - k * 10)
 		if pl.inventory.add(id) > 0:
 			FloatText.spawn(mob.get_parent(), at, "+%s" % d.get("name", id), Color(d.get("color", "#ffffff")).lightened(0.2), 1.4)
+			ChatLog.add("loot", "You got a %s" % d.get("name", id))
+			Sfx.play("loot", 0.8)
+			looted.emit(String(d.get("name", id)))
 			Log.dbg("loot: %s from %s" % [id, mob.id])
 		else:
 			FloatText.spawn(mob.get_parent(), at, "Inventory full", Color("#ff6b6b"), 1.2)
+			ChatLog.add("warning", "Inventory full: a %s was lost" % d.get("name", id))
 		k += 1
 	return got
 
@@ -198,6 +274,8 @@ func award_xp(mob: Mob, killer: Node2D) -> Dictionary:
 		var amount := maxi(1, int(round(float(mob.data.xp) * share * Scaling.xp_mult(int(mob.data.level), a.level, scfg) * a.xp_mult())))
 		a.gain_xp(amount)
 		got[a] = amount
+		if a.is_in_group("player"):
+			ChatLog.add("xp", "+%d XP (%s%s)" % [amount, mob.data.get("name", mob.id), ", party share" if members.size() > 1 else ""])
 	# Show what the player got (or the killer, when the player isn't around).
 	var shown: Node2D = party[0] if not party.is_empty() and got.has(party[0]) else killer
 	FloatText.spawn(mob.get_parent(), mob.global_position + Vector2(0, -mob.size.y - 16), "+%d XP" % got[shown], Color("#9be37d"))
@@ -217,6 +295,12 @@ func respawn_all() -> void:
 		if not m.alive:
 			m.respawn()
 
+## Kind of water at ground x ("pond", "river", "ice", "lava") or "".
+func water_kind_at(x: float) -> String:
+	if env == null:
+		return ""
+	return String(env.water_at(x).get("kind", ""))
+
 func portal_pos(p: Dictionary) -> Vector2:
 	return Vector2(float(p.x), float(p.get("y", ground_y)))
 
@@ -231,11 +315,22 @@ func portal_at(pos: Vector2) -> Dictionary:
 ## Take a portal at the end of this frame (map changes mid-physics are not safe).
 var _travel_pending := false
 
+## Take a portal: the party warps out (rings + sound, warp.out_time), then the map changes
+## and everyone warps in. The map change itself happens outside physics (deferred).
 func travel(portal: Dictionary) -> void:
 	if _travel_pending:
 		return
 	_travel_pending = true
-	_do_travel.call_deferred(portal)
+	var w: Dictionary = _balance.get("warp", {})
+	var out_time := float(w.get("out_time", 0.0))
+	if out_time <= 0.0:
+		_do_travel.call_deferred(portal)
+		return
+	Sfx.play("warp_out")
+	for a in party:
+		if is_instance_valid(a) and a.is_inside_tree():
+			a.start_warp(out_time, false, Color(w.get("color", "#a8f0ff")))
+	get_tree().create_timer(out_time, false, true).timeout.connect(func() -> void: _do_travel.call_deferred(portal))
 
 func _do_travel(portal: Dictionary) -> void:
 	_travel_pending = false
@@ -244,11 +339,17 @@ func _do_travel(portal: Dictionary) -> void:
 		Log.warn("Portal leads to unknown map '%s'" % to)
 		return
 	load_map(to, String(portal.get("to_portal", "")))
+	var w: Dictionary = _balance.get("warp", {})
+	var in_time := float(w.get("in_time", 0.0))
 	var k := 0
 	for a in party:
 		if is_instance_valid(a):
 			a.arrive(spawn_point + Vector2(-k * 14.0 * (1.0 if spawn_point.x > map_w / 2.0 else -1.0), 0))
+			if in_time > 0.0:
+				a.start_warp(in_time, true, Color(w.get("color", "#a8f0ff")))
 			k += 1
+	if in_time > 0.0:
+		Sfx.play("warp_in")
 	Log.ok("Entered %s (Lv %d-%d)" % [map.name, map.levels[0], map.levels[1]])
 	var d := danger(map_id, _player_level())
 	if d != "":

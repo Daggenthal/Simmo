@@ -10,7 +10,8 @@
       "amount": 50,
       "color": "#e04848",
       "stack": 100,
-      "desc": "Restores 50 HP"
+      "desc": "Restores 50 HP",
+      "value": 5
     },
     "white_potion": {
       "name": "White Potion",
@@ -19,7 +20,8 @@
       "amount": 200,
       "color": "#f2f2f2",
       "stack": 100,
-      "desc": "Restores 200 HP"
+      "desc": "Restores 200 HP",
+      "value": 25
     },
     "blue_potion": {
       "name": "Blue Potion",
@@ -28,7 +30,8 @@
       "amount": 40,
       "color": "#4a8be0",
       "stack": 100,
-      "desc": "Restores 40 MP"
+      "desc": "Restores 40 MP",
+      "value": 6
     },
     "xp_tonic": {
       "name": "Scholar's Tonic",
@@ -38,7 +41,8 @@
       "duration": 600,
       "color": "#ffd84a",
       "stack": 20,
-      "desc": "+20% XP for 10 min"
+      "desc": "+20% XP for 10 min",
+      "value": 60
     },
     "xp_elixir": {
       "name": "Sage's Elixir",
@@ -48,7 +52,8 @@
       "duration": 600,
       "color": "#c77dff",
       "stack": 20,
-      "desc": "+50% XP for 10 min"
+      "desc": "+50% XP for 10 min",
+      "value": 200
     }
   },
   "loot": [
@@ -88,5 +93,20 @@
       "xp_tonic",
       2
     ]
-  ]
+  ],
+  "sim_kit": [
+    [
+      "red_potion",
+      4
+    ],
+    [
+      "blue_potion",
+      3
+    ]
+  ],
+  "trade": {
+    "_doc": "Sims accept a trade when what they get is worth at least accept_ratio of what they give (gifts always). They keep keep_hp_potions HP potions for themselves.",
+    "accept_ratio": 0.8,
+    "keep_hp_potions": 2
+  }
 }

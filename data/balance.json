@@ -32,19 +32,32 @@
     "cast_locks_weapon": 0.4,
     "thrown_preferred_range": 0.6,
     "look": {
+      "gender": "male",
       "skin": "#f2c27b",
-      "hair": "#4a3426",
-      "hair_style": "short",
-      "shirt": "#d9534f",
-      "pants": "#3b4a6b",
-      "hat": ""
+      "face": "calm",
+      "eye_color": "#2a2a3a",
+      "hair": "short",
+      "hair_color": "#4a3426",
+      "top": "tee",
+      "top_color": "#d9534f",
+      "bottom": "pants",
+      "bottom_color": "#3b4a6b",
+      "shoes": "boots",
+      "shoes_color": "#4a3426",
+      "hat": "none",
+      "hat_color": "#9aa3ad",
+      "cape": "none",
+      "cape_color": "#c0392b"
     },
     "auto_potion_hp_below": 0.35,
     "auto_potion_mp_below": 0.2,
     "damage_per_point": 1.25,
     "_doc_damage": "Damage bonus per point of the attack's stat above the class's starting value, scaled by cooldown / level_bonus_reference_cooldown. Auto-assign puts 4 points a level into the main stat, which matches the old 5 damage per level.",
     "ap_per_level": 5,
-    "auto_advance_zones": true
+    "auto_advance_zones": true,
+    "mage_keep_distance": 110,
+    "mage_too_close": 70,
+    "_doc_scale": "Skills scale with their cooldown (slow hits hit harder). Ultimates use scale_cooldown instead, so a 60 s cooldown doesn't make them hit 60 s worth."
   },
   "mobs": {
     "green_slime": {
@@ -255,6 +268,93 @@
       },
       "aggro_range": 90,
       "knockback_mult": 0.25
+    },
+    "slime_monarch": {
+      "name": "Slime Monarch",
+      "shape": "slime",
+      "boss": true,
+      "crown": true,
+      "level": 7,
+      "hp": 40000,
+      "touch_damage": 18,
+      "xp": 900,
+      "speed": 35,
+      "hop_velocity": 220,
+      "color": "#58c040",
+      "size": [
+        56,
+        40
+      ],
+      "knockback_mult": 0.0,
+      "aggro_range": 400
+    },
+    "elder_sporecap": {
+      "name": "Elder Sporecap",
+      "shape": "mushroom",
+      "boss": true,
+      "crown": true,
+      "level": 13,
+      "hp": 64000,
+      "touch_damage": 23,
+      "xp": 2400,
+      "speed": 40,
+      "hop_velocity": 0,
+      "color": "#b04a8a",
+      "size": [
+        52,
+        52
+      ],
+      "knockback_mult": 0.0,
+      "aggro_range": 400,
+      "resist": {
+        "poison": 0.5
+      }
+    },
+    "cinder_colossus": {
+      "name": "Cinder Colossus",
+      "shape": "golem",
+      "boss": true,
+      "crown": false,
+      "level": 21,
+      "hp": 88000,
+      "touch_damage": 36,
+      "xp": 5200,
+      "speed": 30,
+      "hop_velocity": 0,
+      "color": "#8a4a3a",
+      "size": [
+        60,
+        64
+      ],
+      "knockback_mult": 0.0,
+      "aggro_range": 400,
+      "resist": {
+        "fire": 0.6,
+        "physical": 0.2
+      }
+    },
+    "bone_warden": {
+      "name": "Bone Warden",
+      "shape": "skeleton",
+      "boss": true,
+      "crown": true,
+      "level": 31,
+      "hp": 130000,
+      "touch_damage": 52,
+      "xp": 11000,
+      "speed": 55,
+      "hop_velocity": 0,
+      "color": "#e8e2d0",
+      "size": [
+        30,
+        58
+      ],
+      "knockback_mult": 0.0,
+      "aggro_range": 400,
+      "resist": {
+        "poison": 0.75,
+        "frost": 0.4
+      }
     }
   },
   "respawn_time": 6.0,
@@ -530,6 +630,78 @@
       "speed_mult": 1.3,
       "color": "#7fe39b",
       "desc": "Attack 30% faster for 10 s"
+    },
+    "arcane_cataclysm": {
+      "name": "Arcane Cataclysm",
+      "element": "lightning",
+      "kind": "ultimate",
+      "ult": "cataclysm",
+      "stat": "int",
+      "mp": 20,
+      "cooldown": 60.0,
+      "cast_time": 1.2,
+      "damage_min": 60,
+      "damage_max": 80,
+      "cone_range": 200,
+      "cone_angle": 0.6,
+      "cone_damage_min": 70,
+      "cone_damage_max": 90,
+      "color": "#b48cff",
+      "desc": "1.2 s channel, then a fire blast in a wide cone and lightning on every mob on the map",
+      "scale_cooldown": 5.0
+    },
+    "titans_wrath": {
+      "name": "Titan's Wrath",
+      "element": "physical",
+      "kind": "ultimate",
+      "ult": "quake",
+      "stat": "str",
+      "mp": 20,
+      "cooldown": 60.0,
+      "cast_time": 0.35,
+      "damage_min": 90,
+      "damage_max": 110,
+      "radius": 260,
+      "stun": 2.5,
+      "berserk_mult": 1.5,
+      "berserk_time": 8.0,
+      "color": "#ff7a3a",
+      "desc": "Leap and quake: hits and stuns every mob nearby on your level, then Berserk (+50% damage, 8 s)",
+      "scale_cooldown": 6.0
+    },
+    "shadow_dance": {
+      "name": "Shadow Dance",
+      "element": "physical",
+      "kind": "ultimate",
+      "ult": "shadow",
+      "stat": "dex",
+      "mp": 20,
+      "cooldown": 60.0,
+      "cast_time": 0.2,
+      "damage_min": 28,
+      "damage_max": 36,
+      "targets": 8,
+      "hits": 3,
+      "range": 320,
+      "step_time": 0.16,
+      "color": "#9a7dff",
+      "desc": "Vanish and blink between up to 8 mobs, striking each 3 times, then return",
+      "scale_cooldown": 1.5
+    },
+    "sanctuary": {
+      "name": "Sanctuary",
+      "element": "holy",
+      "kind": "ultimate",
+      "ult": "sanctuary",
+      "stat": "int",
+      "mp": 20,
+      "cooldown": 60.0,
+      "cast_time": 0.6,
+      "regen": 8,
+      "regen_time": 5.0,
+      "color": "#9dffb0",
+      "desc": "Fully heals the party, then heals 8 HP a second for 5 s",
+      "scale_cooldown": 1.0
     }
   },
   "elements": {
@@ -588,7 +760,15 @@
     "follow_leash": 220,
     "engage_radius": 260,
     "respawn_time": 5.0,
-    "heal_below": 0.65
+    "heal_below": 0.65,
+    "sim_potion_hp_below": 0.4,
+    "start_with": [
+      "Brannoc",
+      "Liriel",
+      "xXKunaiXx"
+    ],
+    "max_size": 4,
+    "_doc_roster": "'sims' is the roster of SimPlayers you know; start_with join at the start; the Party tab (Esc) invites and kicks. max_size counts you."
   },
   "sim_roles": {
     "tank": {
@@ -614,7 +794,8 @@
       "hp_mult": 1.0,
       "follow_offset": -44,
       "color": "#7fe39b",
-      "class": "mage"
+      "class": "mage",
+      "ultimate": "sanctuary"
     },
     "ranged": {
       "label": "Ranged",
@@ -634,36 +815,110 @@
       "name": "Brannoc",
       "role": "tank",
       "look": {
+        "gender": "male",
         "skin": "#e0a878",
-        "hair": "#2b1d14",
-        "hair_style": "short",
-        "shirt": "#3f5f9f",
-        "pants": "#2c3346",
-        "hat": "helm"
+        "face": "fierce",
+        "eye_color": "#2a2a3a",
+        "hair": "short",
+        "hair_color": "#2b1d14",
+        "top": "tunic",
+        "top_color": "#3f5f9f",
+        "bottom": "pants",
+        "bottom_color": "#2c3346",
+        "shoes": "boots",
+        "shoes_color": "#4a3426",
+        "hat": "helm",
+        "hat_color": "#9aa3ad",
+        "cape": "cape",
+        "cape_color": "#2c3e50"
       }
     },
     {
       "name": "Liriel",
       "role": "healer",
       "look": {
+        "gender": "female",
         "skin": "#f6d2b0",
-        "hair": "#f2e2a0",
-        "hair_style": "long",
-        "shirt": "#e8f0e0",
-        "pants": "#6b8f6b",
-        "hat": ""
+        "face": "cheery",
+        "eye_color": "#3a8a4a",
+        "hair": "long",
+        "hair_color": "#f2e2a0",
+        "top": "robe",
+        "top_color": "#e8f0e0",
+        "bottom": "long_skirt",
+        "bottom_color": "#e8f0e0",
+        "shoes": "sandals",
+        "shoes_color": "#4a3426",
+        "hat": "ribbon",
+        "hat_color": "#e86aa0",
+        "cape": "none",
+        "cape_color": "#c0392b"
       }
     },
     {
       "name": "xXKunaiXx",
       "role": "ranged",
       "look": {
+        "gender": "male",
         "skin": "#c68a5a",
-        "hair": "#c43b3b",
-        "hair_style": "spiky",
-        "shirt": "#2f2f38",
-        "pants": "#46304f",
-        "hat": "band"
+        "face": "sleepy",
+        "eye_color": "#2a2a3a",
+        "hair": "spiky",
+        "hair_color": "#c43b3b",
+        "top": "hoodie",
+        "top_color": "#2f2f38",
+        "bottom": "pants",
+        "bottom_color": "#46304f",
+        "shoes": "boots",
+        "shoes_color": "#4a3426",
+        "hat": "headband",
+        "hat_color": "#9aa3ad",
+        "cape": "scarf",
+        "cape_color": "#1c1c1c"
+      }
+    },
+    {
+      "name": "Goldvein",
+      "role": "tank",
+      "look": {
+        "gender": "male",
+        "skin": "#d9a77a",
+        "face": "calm",
+        "eye_color": "#2a2a3a",
+        "hair": "short",
+        "hair_color": "#c98f2a",
+        "top": "vest",
+        "top_color": "#7a6a3a",
+        "bottom": "pants",
+        "bottom_color": "#3a3a3a",
+        "shoes": "boots",
+        "shoes_color": "#4a3426",
+        "hat": "helm",
+        "hat_color": "#9aa3ad",
+        "cape": "cape",
+        "cape_color": "#c98f2a"
+      }
+    },
+    {
+      "name": "Fennick",
+      "role": "ranged",
+      "look": {
+        "gender": "female",
+        "skin": "#f6d2b0",
+        "face": "bright",
+        "eye_color": "#3a6ad0",
+        "hair": "ponytail",
+        "hair_color": "#5a8a3a",
+        "top": "jacket",
+        "top_color": "#3a5a4a",
+        "bottom": "shorts",
+        "bottom_color": "#2a3a2a",
+        "shoes": "boots",
+        "shoes_color": "#4a3426",
+        "hat": "none",
+        "hat_color": "#9aa3ad",
+        "cape": "scarf",
+        "cape_color": "#27ae60"
       }
     }
   ],
@@ -717,14 +972,25 @@
       "hp_mult": 1.15,
       "mp_mult": 0.6,
       "look": {
+        "gender": "male",
         "skin": "#f2c27b",
-        "hair": "#4a3426",
-        "hair_style": "short",
-        "shirt": "#c0392b",
-        "pants": "#3b4a6b",
-        "hat": ""
+        "face": "fierce",
+        "eye_color": "#2a2a3a",
+        "hair": "short",
+        "hair_color": "#4a3426",
+        "top": "tunic",
+        "top_color": "#c0392b",
+        "bottom": "pants",
+        "bottom_color": "#3b4a6b",
+        "shoes": "boots",
+        "shoes_color": "#4a3426",
+        "hat": "none",
+        "hat_color": "#9aa3ad",
+        "cape": "cape",
+        "cape_color": "#8e2a20"
       },
-      "color": "#ff7a5a"
+      "color": "#ff7a5a",
+      "ultimate": "titans_wrath"
     },
     "mage": {
       "name": "Mage",
@@ -753,14 +1019,25 @@
       "hp_mult": 0.85,
       "mp_mult": 1.4,
       "look": {
+        "gender": "female",
         "skin": "#f2c27b",
-        "hair": "#3a2a5a",
-        "hair_style": "long",
-        "shirt": "#5b4bb7",
-        "pants": "#2c2a4a",
-        "hat": ""
+        "face": "bright",
+        "eye_color": "#9a3ab0",
+        "hair": "long",
+        "hair_color": "#3a2a5a",
+        "top": "robe",
+        "top_color": "#5b4bb7",
+        "bottom": "long_skirt",
+        "bottom_color": "#2c2a4a",
+        "shoes": "sandals",
+        "shoes_color": "#4a3426",
+        "hat": "wizard",
+        "hat_color": "#5b4bb7",
+        "cape": "none",
+        "cape_color": "#c0392b"
       },
-      "color": "#9b8cff"
+      "color": "#9b8cff",
+      "ultimate": "arcane_cataclysm"
     },
     "rogue": {
       "name": "Rogue",
@@ -790,15 +1067,109 @@
       "hp_mult": 1.0,
       "mp_mult": 0.9,
       "look": {
+        "gender": "male",
         "skin": "#e0a878",
-        "hair": "#1c1c1c",
-        "hair_style": "spiky",
-        "shirt": "#2f4f3f",
-        "pants": "#2a2a30",
-        "hat": "band"
+        "face": "sleepy",
+        "eye_color": "#2a2a3a",
+        "hair": "messy",
+        "hair_color": "#1c1c1c",
+        "top": "hoodie",
+        "top_color": "#2f4f3f",
+        "bottom": "pants",
+        "bottom_color": "#2a2a30",
+        "shoes": "boots",
+        "shoes_color": "#4a3426",
+        "hat": "bandana",
+        "hat_color": "#c0392b",
+        "cape": "scarf",
+        "cape_color": "#c0392b"
       },
-      "color": "#7fe39b"
+      "color": "#7fe39b",
+      "ultimate": "shadow_dance"
     }
   },
-  "start_class": "warrior"
+  "start_class": "warrior",
+  "ultimate": {
+    "_doc": "When auto-battle (and sims) fire the ultimate: at least min_mobs mobs within range, or a target with more than tough_hits hits of HP left.",
+    "min_mobs": 3,
+    "range": 180,
+    "tough_hits": 6
+  },
+  "warp": {
+    "_doc": "Zone warp (.hack style rings). out_time plays before the map changes, in_time after arriving.",
+    "out_time": 1.2,
+    "in_time": 0.9,
+    "color": "#a8f0ff"
+  },
+  "environment": {
+    "_doc": "Day length in seconds (full cycle), start time (0 midnight, 0.25 dawn, 0.5 noon, 0.75 dusk), max night darkness, weather spell lengths, wind, snow build-up, water and footprints.",
+    "day_length": 480,
+    "start_time": 0.38,
+    "night_darkness": 0.62,
+    "weather": {
+      "clear": [
+        50,
+        110
+      ],
+      "cloudy": [
+        30,
+        60
+      ],
+      "rain": [
+        30,
+        60
+      ],
+      "storm": [
+        20,
+        40
+      ]
+    },
+    "storm_chance": 0.35,
+    "lightning_every": [
+      5,
+      12
+    ],
+    "wind": {
+      "clear": 0.25,
+      "cloudy": 0.4,
+      "rain": 0.55,
+      "storm": 0.95,
+      "snow": 0.35
+    },
+    "snow_build_rate": 0.18,
+    "snow_max": 5.0,
+    "footprint_depth": 3.5,
+    "pond_speed": 0.65,
+    "lava_damage": 6,
+    "player_light_radius": 70
+  },
+  "bosses": {
+    "_doc": "One boss per map. Spawns after kills_to_spawn kills on that map (at spawn_x, on the ground), shown with a big HP bar and an enrage timer. Not dead when the timer runs out: enraged (damage x enrage_damage, speed x enrage_speed, slams twice as often). Slam: a telegraphed shockwave (jump to dodge).",
+    "kills_to_spawn": 30,
+    "enrage_time": 90.0,
+    "enrage_damage": 2.5,
+    "enrage_speed": 1.6,
+    "slam_every": 7.0,
+    "slam_telegraph": 1.0,
+    "slam_radius": 110,
+    "slam_damage_mult": 1.6,
+    "maps": {
+      "mossy_meadow": {
+        "id": "slime_monarch",
+        "spawn_x": 900
+      },
+      "mushroom_grove": {
+        "id": "elder_sporecap",
+        "spawn_x": 1000
+      },
+      "ember_crags": {
+        "id": "cinder_colossus",
+        "spawn_x": 1000
+      },
+      "frostpeak_ruins": {
+        "id": "bone_warden",
+        "spawn_x": 1100
+      }
+    }
+  }
 }

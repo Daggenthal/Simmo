@@ -35,6 +35,7 @@ func _initialize() -> void:
 	WorldS = load("res://scripts/world.gd")
 	_main = load("res://main.tscn").instantiate()
 	_main.spawn_sims = false
+	_main.load_user_settings = false
 	_main.show_start_screen = false
 	_main.start_class = "mage"
 	root.add_child(_main)

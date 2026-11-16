@@ -22,6 +22,7 @@ func _initialize() -> void:
 	var env_seed := OS.get_environment("SIMMO_SEED")
 	seed(int(env_seed) if env_seed != "" else 5150)
 	_main = load("res://main.tscn").instantiate()
+	_main.load_user_settings = false
 	_main.spawn_sims = false
 	root.add_child(_main)  # start screen on (the default)
 
@@ -107,7 +108,22 @@ func _physics_process(_d: float) -> bool:
 				_check(ss.class_id() == "mage", "clicking a card selects it")
 				_check(_main.player == null, "one click only selects, it doesn't start yet")
 				_click(ss, ss.card_rect(mage).get_center())
+			if _pf == 8:
+				var cr = _main.creator
+				_check(cr != null and cr.class_id == "mage" and _main.player == null, "choosing a class opens the character creator")
+				# Customize: female, ponytail, red hair; then start with a name.
+				cr.look.gender = "male"
+				cr.row = 1
+				cr.change(1, 1)
+				_check(cr.look.gender == "female" and cr.look.hair in cr.app.hair.female, "switching gender switches to that gender's hair styles (%s)" % cr.look.hair)
+				cr.look.hair = "ponytail"
+				cr.look.hair_color = "#c43b3b"
+				cr._doll.set_look(cr.look)
+				_check(cr._doll.chains.has("hair_a"), "a ponytail gets a physics chain")
+				cr._name_edit.text = "Testy"
+				cr.finish()
 			if _pf == 10:
+				_check(p != null and p.look.hair == "ponytail" and p.look.hair_color == "#c43b3b" and p.display_name == "Testy", "the game starts with the created look and name (%s, %s)" % [p.look.get("hair", "?") if p else "-", p.display_name if p else "-"])
 				_check(p != null and p.class_id == "mage", "clicking the selected card starts as that class (%s)" % (p.class_id if p else "none"))
 				_check(p.weapon_key == "oak_staff", "a Mage starts with the Oak Staff (%s)" % p.weapon_key)
 				_check(p.spells.keys() == _bal.classes.mage.spells, "a Mage gets the Mage skills (%s)" % str(p.spells.keys()))

@@ -35,6 +35,7 @@ func _initialize() -> void:
 	seed(int(env_seed) if env_seed != "" else 1337)
 	_main = load("res://main.tscn").instantiate()
 	_main.spawn_sims = false  # solo: these checks count the player's own kills
+	_main.load_user_settings = false
 	_main.show_start_screen = false
 	_main.start_class = "warrior"
 	root.add_child(_main)

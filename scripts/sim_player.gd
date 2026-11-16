@@ -18,9 +18,13 @@ func setup_sim(info: Dictionary, balance: Dictionary, leader: Actor, spawn: Vect
 	c.look = info.get("look", {})
 	c.auto_use_spells = true
 	setup(c, spawn, balance.weapons, balance.get("spells", {}))
+	custom_look = true
 	display_name = String(info.get("name", "Sim"))
 	# Role picks the class, weapon and skills (e.g. the healer is a Mage with Heal).
 	set_class(balance, String(role_cfg.get("class", "warrior")), String(role_cfg.get("weapon", "")), role_cfg.get("spells", []))
+	# Some roles have their own ultimate (the healer's Sanctuary instead of the Mage's Cataclysm).
+	if role_cfg.has("ultimate"):
+		set_ultimate(String(role_cfg.ultimate))
 	tag_color = Color(role_cfg.get("color", "#ffffff"))
 	brain.leader = leader
 	brain.role = role
@@ -42,6 +46,8 @@ func _physics_process(delta: float) -> void:
 		if down_t <= 0.0:
 			_revive()
 		return
+	if hp > 0 and float(hp) / max_hp < float(brain.party_cfg.get("sim_potion_hp_below", 0.4)):
+		use_best("heal_hp")
 	super(delta)
 
 func _on_death() -> void:

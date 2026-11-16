@@ -1,15 +1,21 @@
 # Simmo: notes for Claude Code
 
-Simmo is an offline "fake MMO" in Godot 4.7: MapleStory-style side view, simulated players (SimPlayers) who party, guild and trade with you, and idle progress while you're away. Repo: github.com/Daggenthal/Simmo. The full design lives in the design doc "Simulated MMO Idle Game: Design Doc" (ask the owner for the link if you need it).
+Simmo is an offline "fake MMO" in Godot 4.7: MapleStory-style side view, simulated players (the owner calls them **Simmos**; `SimPlayer` in code) who party, guild and trade with you, and idle progress while you're away. Repo: github.com/Daggenthal/Simmo. The full design lives in the design doc "Simulated MMO Idle Game: Design Doc" (ask the owner for the link if you need it).
 
-Current state: milestone M1 (placeholder art drawn in code). Movement, melee weapons, thrown kunai, four spells with status effects and combos, auto-battle with nav-graph pathing. Four maps joined by portals (`data/maps.json`), mob stats and XP scale by level, XP drops off on low mobs. A party of 3 SimPlayers (tank, healer, ranged) shares the auto-battle brain, follows the player across platforms and through portals, and splits kill XP. Portals warn about under-leveled maps without blocking. Inventory with potions and XP tonics, loot from party kills, auto-potions during auto-battle. Class select screen (Warrior / Mage / Rogue) with class-locked weapons, four skills each, STR / DEX / INT / LUK with AP and auto-assign. Auto-battle walks to the next map once you reach its level.
+Current state: milestone M1. Everything is drawn and synthesized in code (no art or audio files). Rendering: 640x360 world units drawn at window resolution (`canvas_items` stretch), so detail is 2x+.
+- Start: class select (Warrior / Mage / Rogue), then a MapleStory-style character creator (gender, skin, face, eyes, hair style and color, top, bottom, shoes, hat, cape, name).
+- Combat: class-locked weapons, four skills per class, a 60 s ultimate each, STR / DEX / INT / LUK with AP and auto-assign, element combos, auto-battle with nav-graph pathing (mages fight from range), auto-potions, auto-advance to the next map.
+- World: four maps with portals and a .hack-style warp, mobs and XP scaled by level, zone bosses after 30 kills (HP bar, enrage timer, telegraphed slams) that drop Diablo-style rarity chests with equippable gear. Day / night, rain, storms, snow that builds up and takes footprints, ponds with ripple physics, bridges, swaying grass and trees, 2D lights with shadows and rim light on characters.
+- Party: 3 Simmos (tank, healer, ranged) share the auto-battle brain, follow you across platforms and through portals, assist your target, dodge boss slams, use ultimates, carry potions, trade with you, chat in party chat and speech bubbles. Roster with invite and kick.
+- UI: HUD with cooldown timers, chat box with tabs and colored channels, inventory (I), stats (K), trade (T), Esc pause menu (settings with volume sliders, inventory and equipment, party).
+- Sound: every effect and ambience synthesized at runtime (`Sfx` autoload).
 
 ## How to work on this repo
 
 **The loop:** Reproduce, write a failing test, fix, run the full suite several times, look at a screenshot when anything visual changed. Every bug fixed so far got a regression test first; keep doing that. When a test passes without your fix, the test is not reproducing the bug yet (this happened twice; see Gotchas).
 
 ```
-./run.sh test     # all six headless suites, ~15 s total, exit 0 = pass
+./run.sh test     # all eleven headless suites, about a minute, exit 0 = pass
 SIMMO_SEED=3 ./run.sh test   # same with another seed; loop a few seeds to catch flaky checks
 ./run.sh          # play
 ./run.sh debug    # hitboxes, debug overlay, full logging
@@ -22,12 +28,18 @@ Screenshots for layout checks (needs a display; on macOS just run it, on Linux u
 ```
 godot --path . --rendering-driver opengl3 --script res://tools/screenshot.gd -- 1280x720   # also 2560x1080, weapon=dagger, class=mage, map=ember_crags, level=15, start (class select screen)
 godot --path . --rendering-driver opengl3 --script res://tools/screenshot_magic.gd          # staged status effects
+godot --path . --rendering-driver opengl3 --script res://tools/screenshot_world.gd -- night_lights   # also day_pond, storm, snow
+godot ... screenshot_dolls.gd (characters, zoomed) / screenshot_creator.gd / screenshot_warp.gd / screenshot_menu.gd / screenshot_boss.gd / screenshot_items.gd / screenshot_portal.gd
+```
+Boss balance probe (full auto party vs each boss at its level; kill time vs the 90 s enrage, knockouts, deaths):
+```
+SIMMO_CLASS=mage godot --headless --fixed-fps 60 --path . --script res://tools/boss_probe.gd
 ```
 Soak run (real game, party + auto-battle, 60 s per map; look for SCRIPT ERROR and the per-map kill/level lines):
 ```
 godot --headless --fixed-fps 60 --path . --script res://tools/soak.gd
 ```
-Output goes to `screenshots/` (gitignored). Software rendering is slow: if mobs look white/frozen in a shot, it was captured too early, wait more frames.
+Output goes to `screenshots/` (gitignored), now at the window's full resolution. Software rendering is slow: if mobs look white/frozen in a shot, it was captured too early, wait more frames. A screenshot window takes keyboard focus while it runs; keys typed elsewhere can land in the game.
 
 ## Owner's conventions (follow these)
 
@@ -47,31 +59,31 @@ Output goes to `screenshots/` (gitignored). Software rendering is slow: if mobs 
 
 | Path | What |
 | --- | --- |
-| `main.tscn`, `scripts/main.gd` | Entry: loads balance, builds world, player, party, camera, sky; follows map changes; global hotkeys (Up = portal, P = party) |
-| `scripts/actor.gd` | `Actor`: the body shared by player and sims. Movement from an intent dict, class (`set_class`), stats and AP (`auto_spend`, `add_stat`, `set_level`), weapons (class-locked `equip`), skills (bolt, lob, chain, heal, strike, slam, volley, dash, buff), buffs, HP/MP/XP, static paper-doll drawing (`draw_doll`, `draw_weapon_shape`) |
-| `scripts/player.gd` | `Player extends Actor`: keyboard/controller input, auto-battle toggle and manual override, inventory use (`use_item`, `use_best`), auto-potions |
-| `scripts/inventory.gd`, `scripts/inventory_ui.gd` | `Inventory` (slots, stacking, item defs) and `InventoryUI` (I window, click to use, item icons) |
-| `data/items.json` | Items, loot table, starter kit, inventory size, use cooldown |
-| `scripts/sim_player.gd` | `SimPlayer extends Actor`: role setup from `sim_roles` (class, weapon, skills), knockout and revive next to the leader |
-| `scripts/start_screen.gd` | `StartScreen`: class select with cards, weapons and skills; emits `class_chosen` |
-| `scripts/stats_ui.gd` | `StatsUI`: K window, + buttons for AP, auto-assign toggle |
-| `scripts/brain.gd` | `Brain`: auto-battle (`think`, `_pick_target`, `pick_spell`), nav routing, follow-the-leader, roles (tank front, healer heals, ranged perches) |
-| `scripts/scaling.gd` | `Scaling`: mob stats by level, XP by level difference, party XP share, level label colors |
-| `scripts/mob.gd` | Mobs: wander/aggro (aggro_range), knockback clamped to their platform (knockback_mult), resists, status effects, shapes and level label |
-| `scripts/combat.gd` | All damage, element, resist and combo rules. Every hit goes through `Combat.hit()` |
-| `scripts/nav.gd` | Nav graph: surfaces + links (jump_up, jump_across, walk_off, drop), Dijkstra routes |
-| `scripts/world.gd` | Loads maps from `data/maps.json`, portals and travel, respawn queue, party list, kill XP (`award_xp`) |
-| `data/maps.json` | Maps: platforms, spawns, portals, level range, theme colors and decor |
-| `scripts/projectile.gd`, `scripts/fx.gd` | Bolts, lobs, kunai; lightning and burst effects |
-| `scripts/hud.gd` | Bottom bar, skill bar, controls panel (F1), debug overlay |
-| `scripts/game_input.gd` | All key and controller bindings in one place |
-| `data/balance.json` | Every tuning number: player, weapons, mobs, spells, elements |
-| `tests/smoke_test.gd` | Movement, platforms, weapons, auto-battle, pathing, target focus |
-| `tests/magic_test.gd` | Statuses, combos, spells, mana, pacing, kunai, weaving |
-| `tests/world_test.gd` | Every map's data (reachable, connected, valid spawns, two-way portals), portal travel, scaling, XP rules, resists |
-| `tests/party_test.gd` | Sims: spawn, follow onto platforms, role positions, heal, ranged perch, XP share, loot, fighting, knockout, portal |
-| `tests/items_test.gd` | Inventory stacking, potions, best-potion pick, XP tonics and expiry, loot and min_level, auto-potions, R hotkey, I window clicks |
-| `tests/class_test.gd` | Class select (keys and clicks), weapon locks, AP and auto-assign, stats window, staff spell power, every warrior and rogue skill, auto-advance to the next map |
+| `main.tscn`, `scripts/main.gd` | Entry: class select -> creator -> `start_game` builds weather, world, player, party, camera, sky, HUD, chat, trade, pause menu; global hotkeys; invite / kick |
+| `scripts/actor.gd` | `Actor`: body shared by player and Simmos. Intent-driven movement, class (`set_class`), stats / AP / gear (`stat`, `gear_mod`, `equip_slot`), skills (bolt, lob, chain, heal, strike, slam, volley, dash, buff), ultimates (channel, cataclysm, quake, shadow, sanctuary), buffs, inventory and items, warp, footsteps, speech bubbles, damage tracking |
+| `scripts/doll.gd` | `Doll`: paper-doll renderer at 2x density, spring chains for hair and cloth (wind + motion), blinking, walk cycle, rim light from `Lighting` |
+| `scripts/player.gd` | `Player extends Actor`: input, auto-battle toggle and override, auto-potions, chest looting, auto-advance |
+| `scripts/sim_player.gd` | `SimPlayer extends Actor`: role setup (class, weapon, skills, ultimate), knockout and revive, own potions |
+| `scripts/brain.gd` | `Brain`: auto-battle (`think`, `_pick_target`, `pick_spell`), nav routing, follow, roles (tank front, healer heals, ranged perches and prefers targets in reach), assist the leader's target, caster range play, ultimates, boss focus, slam dodging |
+| `scripts/mob.gd` | Mobs: aggro, resists, knockback, statuses, stun, shapes, level label; bosses (chase, slam telegraph, enrage) |
+| `scripts/combat.gd` | All damage, element, resist and combo rules; hit sounds, combat log, damage_dealt. Every hit goes through `Combat.hit()` |
+| `scripts/world.gd` | Maps from `data/maps.json`, portals and warp travel, respawns, party, kill XP and loot, boss spawning, chests, platform light occluders |
+| `scripts/environment.gd` | `MapEnvironment`: trees, grass, snow height field and footprints, water wave sim and wading, bridges, lamps, rain and snow particles |
+| `scripts/weather.gd`, `scripts/weather_state.gd`, `scripts/sky_art.gd` | Time of day, weather state machine, wind, world tint (CanvasModulate), lightning; sun, moon, stars |
+| `scripts/lighting.gd` | `Lighting`: PointLight2D helpers (`add`, `flash`), registry for rim light (`near`), darkness |
+| `scripts/sfx.gd` | `Sfx` autoload: every sound synthesized (hits, steps, casts, warps, thunder, rain / wind loops), volumes |
+| `scripts/nav.gd`, `scripts/scaling.gd` | Nav graph and Dijkstra routes; mob stats, XP rules, party share |
+| `scripts/inventory.gd`, `scripts/inventory_ui.gd` | `Inventory` (stacks and one-of-a-kind items) and the I window (use / equip, icons, tooltips) |
+| `scripts/gear.gd`, `scripts/chest.gd` | Diablo-style loot generation (rarities, affixes, legendaries) and the boss chest |
+| `scripts/trade.gd`, `scripts/trade_ui.gd` | Trade rules (`sim_verdict`, all-or-nothing `execute`) and the T window |
+| `scripts/chat_log.gd`, `scripts/chat_box.gd`, `scripts/chatter.gd` | Chat store and channels, the chat box with tabs, fake chat and Simmo reactions |
+| `scripts/start_screen.gd`, `scripts/creator_screen.gd` | Class select and character creator |
+| `scripts/hud.gd`, `scripts/stats_ui.gd`, `scripts/pause_menu.gd` | HUD (bars, skills with cooldown timers, ultimate, party frames, boss bar, banners, flash), K window, Esc menu (settings saved to user://settings.cfg) |
+| `scripts/projectile.gd`, `scripts/fx.gd`, `scripts/float_text.gd` | Bolts, lobs, kunai (with lights, target leading); lightning, bursts, cones, afterimages, warp rings |
+| `scripts/game_input.gd`, `scripts/log.gd` | Key and controller bindings; colored logging |
+| `data/*.json` | `balance` (tuning), `maps`, `items`, `loot`, `appearance`, `chat` |
+| `tests/*.gd` | smoke, magic, world, party, items, class, combat_ai, social, environment, menu, boss |
+| `tools/*.gd` | Screenshots, `soak.gd`, `boss_probe.gd` |
 
 ## Gotchas learned the hard way
 
@@ -89,6 +101,11 @@ Output goes to `screenshots/` (gitignored). Software rendering is slow: if mobs 
 - **Stats come from AP:** Setting `player.level` directly leaves stats (and damage) at the old level. Use `player.set_level(n)`, which re-spends AP and refills HP/MP.
 - **Map changes are deferred:** `world.travel()` runs at the end of the frame (freeing physics bodies mid-physics is unsafe). Wait a few frames before checking. Map pieces live under `World/Map`; anything else under World that isn't in the `persist` group (actors, debug draw) is freed on travel.
 - **Mob levels are rolled** (`level_spread`), so a test that needs an exact level should set `mob.data = world.mob_data(id, level)` and `mob.level` itself.
+- **Saved settings:** Tests and tools set `_main.load_user_settings = false`, or a user's saved volume / weather / time settings change their results.
+- **Kills are last hits:** The player often lands the last hit, so judge Simmo contribution by `damage_dealt`, not `kills`.
+- **Warp travel takes time:** Portals warp out for `warp.out_time` (1.2 s) before the map changes; wait about 90 frames after pressing Up.
+- **Doll chains need points before drawing:** `Doll.set_look` lays chains out immediately; a new chain added elsewhere must call `_reset_chains()`.
+- **Typed loop vars:** `for side in [-1.0, 1.0]` gives a Variant; `var a := side * x` then fails to parse. Write `for side: float in [...]`.
 - **Fixed seeds hide flakes:** A check that passes on the default seed can fail on others (happened twice in M1: a mob parked next to a mid-jump player, and combo dummies that were only "tough" for a level 1 player). Loop `SIMMO_SEED`.
 
 ## Rules the game currently follows (keep them unless the owner changes them)
@@ -105,14 +122,19 @@ Output goes to `screenshots/` (gitignored). Software rendering is slow: if mobs 
 - Portals never block travel. Under the map's minimum level the label and hint turn orange; 5+ under turns them red; entering shows a warning banner.
 - XP buffs multiply kill XP and don't stack (one "xp" buff; a weaker one is refused). Loot from any party kill goes to the player's inventory.
 - Party XP: each member on the map gets `xp * (1 + 0.2 * (n - 1)) / n`, adjusted for their own level.
-- Sims stay within 220 px of the leader, only fight mobs within 260 px of the leader, heal under 65% HP, and revive next to the leader 5 s after a knockout.
+- Sims stay within 220 px of the leader, only fight mobs within 260 px of the leader (bosses anywhere), heal under 65% HP, and revive next to the leader 5 s after a knockout. Ranged and healer assist the leader's target; ranged prefer targets already in reach and only climb to a perch that's a short hop away.
+- Mages (INT classes) keep ~110 px from their target and back off under 70 px; they melee only when every attack spell is on cooldown or out of MP.
+- Ultimates: 60 s cooldown, G only (not Shift: too easy to hit by accident). Auto-battle fires them on 3+ mobs nearby or a target with 6+ hits of HP left; the healer's Sanctuary fires when someone drops under 25% or two under 50%. Damage scales with `scale_cooldown`, not the 60 s.
+- Bosses: spawn after 30 kills on the map, immune to freeze and stun, enrage at 90 s (x2.5 damage, x1.6 speed, slams twice as often). A full auto party at the boss's level kills it in about 60-80 s (`tools/boss_probe.gd`). Auto-battle loots the chest and won't auto-advance while a boss or chest is pending.
+- Loot rarity weights: junk 28, common 30, magic 24, rare 12, epic 5, legendary 1. Gear base: 60% a weapon of the player's class. Gear can't be traded yet.
+- Chat: party lines are rate-limited (8 s per Simmo, 2.5 s party-wide) except forced events (join, level up, ultimate, map, out of potions).
 
 ## Backlog, in order
 
-1. **Items follow-ups:** Ground drops with pickup (auto-battle would need to path to them); a potion shop in town and mesos/currency; equipment (weapons as items, stats); sims with their own inventories and potions; save the inventory (with M2 save/load).
-2. **M1 follow-ups:** Mob aggro should prefer the tank (taunt); sims chat lines; more hair styles, hats and outfits for paper dolls; name tags overlap when sims bunch up; the party frames don't show MP; sims don't pick up the player's weapon or level changes after joining beyond XP.
-3. **Away loop (M2):** Save/load (versioned, autosave), abstract simulation tick for off-screen sims, offline progress = abstract ticks for elapsed time (clamped), guild report screen.
-4. **Mobile:** Touch controls (virtual stick, jump, attack, skill buttons, AUTO), safe areas, Android export first, then iOS. Test on the Galaxy Z Fold 6 (folded and unfolded) and iPhone 17 Pro Max.
-5. **Maps:** Town services (shops, NPCs) in Mossy Meadow; a boss room at the end of Frostpeak; portals on platforms (supported in data via `y`, not used yet).
-6. **Polish found while testing:** Projectiles ignore platforms (they only stop at the target's floor height); lobbed globs can't splash on a platform with no mob on it; controller spell bindings (B / LB / L3 / R3) are temporary until a skill menu exists; the bottom bar is tight at 640 px wide.
-7. Later (see design doc): Guild system, trading with sims, chat (quick-chat + intent parser), tavern bartender mini-game, raids, world bosses, fake patch days.
+1. **Loot follow-ups:** Unequip; a vendor to sell junk and buy potions (currency); trading gear with Simmos; Simmos wearing gear; equipment shown on the paper doll; gear saved with M2.
+2. **Party follow-ups:** Taunt (boss aggro on the tank); Simmos sometimes idle in fast trash fights because the player outpaces them; party frames don't show MP; mage parties kill trash faster than the other classes (map-wide ultimate).
+3. **Away loop (M2):** Save/load (versioned, autosave) including look, class, gear, inventory and settings; abstract simulation tick for off-screen Simmos; offline progress; guild report screen.
+4. **Mobile:** Touch controls (virtual stick, jump, attack, skills, ultimate, AUTO), safe areas, Android first, then iOS. Test on the Galaxy Z Fold 6 (folded and unfolded) and iPhone 17 Pro Max. Check lighting and shadows' cost on phones (`Lighting.enabled` turns lights off).
+5. **Maps:** Town services and NPCs; a dark cave map to show off lighting; boss rooms; portals on platforms (supported in data via `y`).
+6. **Polish found while testing:** Projectiles ignore platforms; controller bindings for the ultimate, trade and menus; chat typing (Enter to talk, Simmos answer); more hair styles, hats and outfits.
+7. Later (see design doc): Guild system, chat intent parser, tavern bartender mini-game, raids, world bosses, fake patch days.

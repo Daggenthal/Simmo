@@ -1,0 +1,179 @@
+{
+  "_doc": "Boss chest loot, Diablo style. A chest rolls 'drops' items; each picks a rarity by weight, then a base. Junk is vendor trash; gear gets as many random affixes as its rarity allows. Gear power scales with the boss level. Legendaries also get a unique name and one special bonus.",
+  "drops": [
+    3,
+    5
+  ],
+  "rarities": {
+    "junk": {
+      "name": "Junk",
+      "color": "#9d9d9d",
+      "weight": 28,
+      "affixes": 0,
+      "value": 2
+    },
+    "common": {
+      "name": "Common",
+      "color": "#ffffff",
+      "weight": 30,
+      "affixes": 0,
+      "value": 10
+    },
+    "magic": {
+      "name": "Magic",
+      "color": "#6969ff",
+      "weight": 24,
+      "affixes": 1,
+      "value": 30
+    },
+    "rare": {
+      "name": "Rare",
+      "color": "#ffff00",
+      "weight": 12,
+      "affixes": 2,
+      "value": 80
+    },
+    "epic": {
+      "name": "Epic",
+      "color": "#a335ee",
+      "weight": 5,
+      "affixes": 3,
+      "value": 200
+    },
+    "legendary": {
+      "name": "Legendary",
+      "color": "#ff8000",
+      "weight": 1,
+      "affixes": 4,
+      "value": 600
+    }
+  },
+  "rarity_order": [
+    "junk",
+    "common",
+    "magic",
+    "rare",
+    "epic",
+    "legendary"
+  ],
+  "junk": [
+    "Slime Goo",
+    "Cracked Bone",
+    "Bent Nail",
+    "Moldy Spore",
+    "Ashen Pebble",
+    "Frozen Twig",
+    "Torn Cloth"
+  ],
+  "bases": {
+    "short_sword": {
+      "slot": "weapon",
+      "name": "Sword",
+      "weapon": "short_sword"
+    },
+    "iron_hammer": {
+      "slot": "weapon",
+      "name": "Hammer",
+      "weapon": "iron_hammer"
+    },
+    "oak_staff": {
+      "slot": "weapon",
+      "name": "Staff",
+      "weapon": "oak_staff"
+    },
+    "dagger": {
+      "slot": "weapon",
+      "name": "Dagger",
+      "weapon": "dagger"
+    },
+    "throwing_kunai": {
+      "slot": "weapon",
+      "name": "Kunai",
+      "weapon": "throwing_kunai"
+    },
+    "ring": {
+      "slot": "ring",
+      "name": "Ring"
+    },
+    "amulet": {
+      "slot": "amulet",
+      "name": "Amulet"
+    }
+  },
+  "base_bonus": {
+    "_doc": "Every gear piece: weapons get damage % per boss level, rings and amulets a main-stat bonus per level.",
+    "weapon_damage_per_level": 0.8,
+    "jewel_stat_per_level": 0.25
+  },
+  "affixes": {
+    "str": {
+      "label": "+{v} STR",
+      "per_level": 0.4
+    },
+    "dex": {
+      "label": "+{v} DEX",
+      "per_level": 0.4
+    },
+    "int": {
+      "label": "+{v} INT",
+      "per_level": 0.4
+    },
+    "luk": {
+      "label": "+{v} LUK",
+      "per_level": 0.4
+    },
+    "damage": {
+      "label": "+{v}% damage",
+      "per_level": 0.6
+    },
+    "crit": {
+      "label": "+{v}% crit",
+      "per_level": 0.15
+    },
+    "hp": {
+      "label": "+{v} max HP",
+      "per_level": 3.0
+    },
+    "mp": {
+      "label": "+{v} max MP",
+      "per_level": 2.0
+    }
+  },
+  "prefixes": {
+    "str": "Mighty",
+    "dex": "Nimble",
+    "int": "Wise",
+    "luk": "Lucky",
+    "damage": "Cruel",
+    "crit": "Keen",
+    "hp": "Sturdy",
+    "mp": "Arcane"
+  },
+  "legendary_names": [
+    "Dawnbreaker",
+    "Whisper of the Wyrm",
+    "Heart of Frostpeak",
+    "Emberfang",
+    "Sporemother's Gift",
+    "Monarch's Gel",
+    "The Last Lantern",
+    "Stormcaller"
+  ],
+  "legendary_specials": [
+    {
+      "key": "damage",
+      "label": "+{v}% damage (legendary)",
+      "per_level": 1.2
+    },
+    {
+      "key": "crit",
+      "label": "+{v}% crit (legendary)",
+      "per_level": 0.4
+    },
+    {
+      "key": "hp",
+      "label": "+{v} max HP (legendary)",
+      "per_level": 8.0
+    }
+  ]
+}

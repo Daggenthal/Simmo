@@ -1,0 +1,114 @@
+{
+  "_doc": "Character customization (MapleStory style). A look is {gender, skin, face, eye_color, hair, hair_color, top, top_color, bottom, bottom_color, shoes, shoes_color, hat, hat_color, cape, cape_color}. Hair styles are listed per gender; colors are hex.",
+  "genders": [
+    "male",
+    "female"
+  ],
+  "skin": [
+    "#ffe3c8",
+    "#f6d2b0",
+    "#f2c27b",
+    "#e0a878",
+    "#c68a5a",
+    "#8d5a3a",
+    "#5a3a2a"
+  ],
+  "faces": [
+    "calm",
+    "bright",
+    "sleepy",
+    "fierce",
+    "cheery"
+  ],
+  "eye_colors": [
+    "#2a2a3a",
+    "#3a6ad0",
+    "#3a8a4a",
+    "#8a5a2a",
+    "#9a3ab0",
+    "#c43b3b"
+  ],
+  "hair": {
+    "male": [
+      "short",
+      "spiky",
+      "messy",
+      "swept",
+      "long_tied",
+      "bowl"
+    ],
+    "female": [
+      "long",
+      "ponytail",
+      "twintails",
+      "bob",
+      "bun",
+      "side_tail"
+    ]
+  },
+  "hair_colors": [
+    "#2b1d14",
+    "#4a3426",
+    "#8a5a2a",
+    "#c98f2a",
+    "#f2e2a0",
+    "#e0e0e0",
+    "#c43b3b",
+    "#e86aa0",
+    "#3a6ad0",
+    "#7a4ab0",
+    "#4a8a3a",
+    "#1c1c1c"
+  ],
+  "tops": [
+    "tee",
+    "tunic",
+    "jacket",
+    "robe",
+    "vest",
+    "hoodie"
+  ],
+  "bottoms": [
+    "pants",
+    "shorts",
+    "skirt",
+    "long_skirt"
+  ],
+  "shoes": [
+    "boots",
+    "sneakers",
+    "sandals"
+  ],
+  "hats": [
+    "none",
+    "beanie",
+    "bandana",
+    "cap",
+    "wizard",
+    "headband",
+    "ribbon",
+    "helm"
+  ],
+  "capes": [
+    "none",
+    "cape",
+    "scarf"
+  ],
+  "cloth_colors": [
+    "#c0392b",
+    "#e67e22",
+    "#f1c40f",
+    "#27ae60",
+    "#16a085",
+    "#2980b9",
+    "#5b4bb7",
+    "#8e44ad",
+    "#ecf0f1",
+    "#7f8c8d",
+    "#2c3e50",
+    "#6d4c2f",
+    "#3b4a6b",
+    "#2f4f3f",
+    "#1c1c1c"
+  ]
+}

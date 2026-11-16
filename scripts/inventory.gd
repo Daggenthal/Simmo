@@ -62,6 +62,30 @@ func remove(id: String, n := 1) -> int:
 		changed.emit()
 	return n - left
 
+## Put a one-of-a-kind item (boss gear or junk, see Gear) in the first empty slot. Returns the slot or -1.
+func add_item(item: Dictionary) -> int:
+	for k in slots.size():
+		if slots[k] == null:
+			slots[k] = {"id": "item", "count": 1, "item": item}
+			changed.emit()
+			return k
+	return -1
+
+func take_slot(k: int) -> Dictionary:
+	var s = slots[k]
+	if s == null:
+		return {}
+	slots[k] = null
+	changed.emit()
+	return s
+
+func items_of_rarity(rarity: String) -> int:
+	var n := 0
+	for s in slots:
+		if s != null and s.has("item") and String(s.item.rarity) == rarity:
+			n += 1
+	return n
+
 func count(id: String) -> int:
 	var c := 0
 	for s in slots:

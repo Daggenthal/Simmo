@@ -58,6 +58,12 @@ static func hit(mob: Mob, attacker: Node2D, base: int, element: String, opts: Di
 		amount = maxi(1, int(round(amount * (1.0 - res))))
 	var knock := 0.0 if mob.is_frozen() else float(opts.get("knockback", 0.0))
 	mob.take_hit(amount, crit, int(opts.get("dir", 1)), attacker, knock, element)
+	var mine: bool = attacker != null and is_instance_valid(attacker) and attacker.is_in_group("player")
+	if attacker != null and is_instance_valid(attacker) and "damage_dealt" in attacker:
+		attacker.damage_dealt += amount
+	Sfx.play("crit" if crit else "hit", 1.0 if mine else 0.3, randf_range(0.9, 1.1))
+	if attacker and is_instance_valid(attacker) and attacker.is_in_group("player"):
+		ChatLog.add("combat", "You hit %s for %d%s%s" % [mob.data.get("name", mob.id), amount, " (crit)" if crit else "", "" if element == "physical" else " " + element])
 
 	# Element effects (only if the mob survived the hit).
 	var proc := float(opts.get("proc", 1.0)) * (1.0 - res)

@@ -14,6 +14,7 @@ var _kos := 0
 func _initialize() -> void:
 	_log = root.get_node("Log")
 	_main = load("res://main.tscn").instantiate()
+	_main.load_user_settings = false
 	_main.show_start_screen = false
 	var cls := OS.get_environment("SIMMO_CLASS")
 	_main.start_class = cls

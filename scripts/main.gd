@@ -21,10 +21,22 @@ var _hills: Array = []
 var items: Dictionary = {}
 var inventory_ui: InventoryUI
 var stats_ui: StatsUI
+var chat_box: ChatBox
+var chatter: Chatter
+var trade_ui: TradeUI
+var chat_data: Dictionary = {}
+var weather: Weather
+var sky_art: Control
+var _clouds: Node2D
+var _player_light: PointLight2D
+var pause_menu: PauseMenu
+## Tests and tools set this false so saved user settings can't change their results.
+var load_user_settings := true
 var show_start_screen := true
 ## Class used when the start screen is skipped ("" = balance.json start_class).
 var start_class := ""
 var start_screen: StartScreen
+var creator: CreatorScreen
 var _start_layer: CanvasLayer
 
 func _ready() -> void:
@@ -46,16 +58,41 @@ func _ready() -> void:
 	start_game(start_class if start_class != "" else String(balance.get("start_class", "warrior")))
 
 func _on_class_chosen(id: String) -> void:
-	_start_layer.queue_free()
-	start_screen = null
-	start_game(id)
+	start_screen.visible = false
+	creator = CreatorScreen.new()
+	creator.balance = balance
+	creator.app = load_json("res://data/appearance.json")
+	creator.class_id = id
+	creator.done.connect(func(lk: Dictionary, pname: String) -> void:
+		_start_layer.queue_free()
+		start_screen = null
+		creator = null
+		start_game(id, lk, pname))
+	creator.back.connect(func() -> void:
+		creator.queue_free()
+		creator = null
+		start_screen._chosen = false
+		start_screen.visible = true)
+	_start_layer.add_child(creator)
 
-## Build the game for class `id`.
-func start_game(id: String) -> void:
+static func load_json(path: String) -> Dictionary:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		return {}
+	var parsed = JSON.parse_string(f.get_as_text())
+	return parsed if parsed is Dictionary else {}
+
+## Build the game for class `id`, with the look and name from the character creator (if any).
+func start_game(id: String, look: Dictionary = {}, player_name := "") -> void:
 	Log.ok("Starting as %s" % balance.classes.get(id, {}).get("name", id))
 	_build_sky()
+	weather = Weather.new()
+	weather.name = "Weather"
+	add_child(weather)
+	weather.setup(self, balance.get("environment", {}))
 	world = World.new()
 	world.name = "World"
+	world.weather = weather
 	add_child(world)
 	world.map_changed.connect(_on_map_changed)
 	world.build(balance, start_map)
@@ -63,7 +100,14 @@ func start_game(id: String) -> void:
 	player = Player.new()
 	player.name = "Player"
 	player.setup(balance.player, world.spawn_point, balance.weapons, balance.get("spells", {}))
+	if not look.is_empty():
+		player.custom_look = true
+		player.look = look
 	player.set_class(balance, id)
+	player.display_name = player_name
+	player.tag_color = Color("#ffffff")
+	# A soft light around you, only noticeable at night.
+	_player_light = Lighting.add(player, Color("#ffe9c8"), float(balance.get("environment", {}).get("player_light_radius", 70)), 0.0)
 	player.world = world
 	world.add_child(player)
 	world.party = [player]
@@ -80,8 +124,6 @@ func start_game(id: String) -> void:
 	_cam.position_smoothing_speed = 8.0
 	player.add_child(_cam)
 	_on_map_changed(world.map_id)
-	if spawn_sims:
-		summon_party()
 
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -96,6 +138,33 @@ func start_game(id: String) -> void:
 	stats_ui.player = player
 	stats_ui.inventory_ui = inventory_ui
 	layer.add_child(stats_ui)
+	chat_data = ChatLog.load_data()
+	ChatLog.clear()
+	chat_box = ChatBox.new()
+	layer.add_child(chat_box)
+	trade_ui = TradeUI.new()
+	trade_ui.player = player
+	trade_ui.main = self
+	trade_ui.trade_cfg = items.get("trade", {})
+	trade_ui.chat = chat_data
+	layer.add_child(trade_ui)
+	chatter = Chatter.new()
+	add_child(chatter)
+	chatter.setup(self, chat_data)
+	var pause_layer := CanvasLayer.new()
+	pause_layer.layer = 15
+	pause_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(pause_layer)
+	pause_menu = PauseMenu.new()
+	pause_menu.main = self
+	pause_layer.add_child(pause_menu)
+	if load_user_settings:
+		pause_menu.load_settings()
+	else:
+		pause_menu.apply_settings()
+	ChatLog.add("system", "Welcome to Simmo! You are a %s in %s." % [player.class_name_label(), world.map.name])
+	if spawn_sims:
+		summon_party()
 	# Portal labels are colored by danger for the player's level; redraw when it changes.
 	player.stats_changed.connect(world.queue_redraw)
 
@@ -113,28 +182,57 @@ static func load_balance() -> Dictionary:
 	var parsed = JSON.parse_string(f.get_as_text())
 	return parsed if parsed is Dictionary else {}
 
-## SimPlayers from balance.json "sims", lined up behind the player.
+## The starting party (balance.json party.start_with), lined up behind the player.
 func summon_party() -> void:
-	if not sims.is_empty():
-		return
-	var k := 0
+	for n in balance.party.get("start_with", []):
+		var info := roster_entry(String(n))
+		if not info.is_empty():
+			invite(info)
+
+func roster_entry(sim_name: String) -> Dictionary:
 	for info in balance.get("sims", []):
-		var s := SimPlayer.new()
-		s.name = "Sim_%s" % info.name
-		s.setup_sim(info, balance, player, player.global_position + Vector2(-20 - k * 14, 0))
-		s.world = world
-		world.add_child(s)
-		sims.append(s)
-		world.party.append(s)
-		k += 1
-	Log.ok("Party: %s joined" % ", ".join(sims.map(func(x): return "%s (%s)" % [x.display_name, x.role])))
+		if String(info.name) == sim_name:
+			return info
+	return {}
+
+func in_party(sim_name: String) -> bool:
+	for s in sims:
+		if is_instance_valid(s) and s.display_name == sim_name:
+			return true
+	return false
+
+## Invite a SimPlayer from the roster. Returns "" or why not.
+func invite(info: Dictionary) -> String:
+	if in_party(String(info.name)):
+		return "%s is already in your party" % info.name
+	if sims.size() + 1 >= int(balance.party.get("max_size", 4)):
+		return "Your party is full"
+	var s := SimPlayer.new()
+	s.name = "Sim_%s" % info.name
+	s.setup_sim(info, balance, player, player.global_position + Vector2(-20 - sims.size() * 14, 0))
+	s.setup_items(items, items.get("sim_kit", []))
+	s.world = world
+	world.add_child(s)
+	sims.append(s)
+	world.party.append(s)
+	if chatter:
+		chatter.watch(s)
+		ChatLog.add("system", "%s (%s %s) joined the party" % [s.display_name, s.class_name_label(), s.role])
+		chatter.party_say(s, "join", {}, true)
+	return ""
+
+## Kick a SimPlayer from the party.
+func kick(s: Actor) -> void:
+	if not s in sims:
+		return
+	sims.erase(s)
+	world.party.erase(s)
+	ChatLog.add("system", "%s left the party" % s.display_name)
+	s.queue_free()
 
 func dismiss_party() -> void:
-	for s in sims:
-		world.party.erase(s)
-		s.queue_free()
-	sims.clear()
-	Log.info("Party dismissed")
+	for s in sims.duplicate():
+		kick(s)
 
 ## New map: camera limits and sky colors follow it.
 func _on_map_changed(_id: String) -> void:
@@ -143,9 +241,10 @@ func _on_map_changed(_id: String) -> void:
 		hud.on_map_entered.call_deferred()
 	if _cam:
 		_cam.limit_right = int(world.map_w)
-		# Bottom limit keeps the ground just above the HUD bar (22 px) with some dirt showing.
+		# Bottom limit keeps the ground above the HUD bar (22 px) and the skill row above it,
+		# so actors at a map edge (where portals are) aren't hidden behind the skill slots.
 		# No camera offset: Camera2D offsets ignore limits and push the ground under the HUD.
-		_cam.limit_bottom = int(world.ground_y + 38)
+		_cam.limit_bottom = int(world.ground_y + 50)
 		_cam.reset_smoothing()
 	var th: Dictionary = world.theme
 	if _sky:
@@ -164,7 +263,11 @@ func _build_sky() -> void:
 	sky.set_anchors_preset(Control.PRESET_FULL_RECT)
 	sky_layer.add_child(sky)
 	_sky = sky
+	sky_art = SkyArt.new()
+	sky_art.main = self
+	sky_layer.add_child(sky_art)
 	var clouds := Parallax2D.new()
+	_clouds = clouds
 	clouds.scroll_scale = Vector2(0.08, 0.6)
 	clouds.z_index = -6
 	var cl := preload("res://scripts/background.gd").new()
@@ -206,8 +309,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("weapon_next"):
 		var keys: Array = player.allowed_weapons
 		player.equip(String(keys[(keys.find(player.weapon_key) + 1) % keys.size()]))
+	elif event.is_action_pressed("trade_toggle"):
+		if trade_ui.visible:
+			trade_ui.visible = false
+		else:
+			trade_ui.open()
+	elif event.is_action_pressed("chat_tab"):
+		chat_box.cycle_tab()
 	elif event.is_action_pressed("stats_toggle"):
 		stats_ui.visible = not stats_ui.visible
+	elif event.is_action_pressed("move_up") and world.chest_at(player.global_position) != null:
+		world.chest_at(player.global_position).open(player)
 	elif event.is_action_pressed("move_up"):
 		var portal := world.portal_at(player.global_position)
 		if not portal.is_empty() and player.is_on_floor():
@@ -230,6 +342,12 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(_delta: float) -> void:
 	if _debug_draw:
 		_debug_draw.queue_redraw()
+	if weather and world:
+		_sky.color = weather.sky_color(Color(world.theme.get("sky", "#8fd0f5")))
+		if _clouds:
+			_clouds.modulate = Color(1, 1, 1).lerp(Color("#7c8592"), weather.cloud).lerp(Color("#2a3050"), weather.night_amount() * 0.7)
+		if _player_light:
+			_player_light.energy = clampf(Lighting.darkness * 1.4 - 0.2, 0.0, 0.9)
 
 func _on_debug_draw() -> void:
 	if not Log.debug or player == null:

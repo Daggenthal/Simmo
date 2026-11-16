@@ -1,6 +1,6 @@
 # Simmo
 
-An offline fake MMO: MapleStory-style side view, simulated players, guilds that keep playing while you're away. This is milestone M1: combat, four maps joined by portals, and a party of three SimPlayers, all with placeholder art drawn in code.
+An offline fake MMO: MapleStory-style side view, simulated players (Simmos) who party, chat and trade with you, and guilds that keep playing while you're away. Milestone M1: classes and character creation, four maps with portals, a party of Simmos, zone bosses with loot, weather and day / night, all drawn and synthesized in code (no art or audio files).
 
 ## Run it
 
@@ -10,7 +10,7 @@ Needs Godot 4.7 or newer: `brew install --cask godot`
 ./run.sh          # play
 ./run.sh debug    # play with debug mode (hitboxes, overlay, full logging)
 ./run.sh editor   # open in the Godot editor
-./run.sh test     # all headless test suites
+./run.sh test     # all headless test suites (SIMMO_SEED=n to vary the seed)
 ```
 
 ## Controls
@@ -21,116 +21,111 @@ Needs Godot 4.7 or newer: `brew install --cask godot`
 | Jump | Alt or Space | A / Cross |
 | Attack | Ctrl or J | X / Square |
 | Drop through platform | Down + Jump | Down + A |
-| Switch weapon (your class's) | 1 / 2, or E to cycle | RB / R1 |
 | Class skills 1 to 4 | Z / X / C / V | B / LB / L3 / R3 |
+| Ultimate (60 s cooldown) | G | |
+| Switch weapon (your class's) | 1 / 2, or E to cycle | RB / R1 |
+| Auto-battle on / off | Q or Tab (or the AUTO button) | Y / Triangle |
+| Enter a portal, open a chest | Stand on it + Up | Up |
+| HP potion / MP potion | R / F | |
+| Inventory window (click to use or equip) | I | |
 | Stats window (spend AP, auto-assign) | K | |
-| Auto-battle on/off | Q or Tab (or the AUTO button) | Y / Triangle |
+| Trade with a party member | T | |
+| Chat tabs (All / Chat / Combat) | Y | |
+| Party on / off | P | |
+| Pause menu (settings, inventory, party) | Esc | |
 | Show / hide controls | F1 | Start / Options |
 | Debug overlay | F3 | Back / Share |
-| Enter a portal | Stand on it + Up | Up |
-| Party on / off | P | |
-| Inventory (click an item to use it) | I | |
-| HP potion / MP potion | R / F | |
 | Respawn all mobs | F5 | |
+
+## Starting out
+
+1. Pick a class. The select screen lists each class's weapons (and how they attack) and all four skills.
+2. Create your character: name, gender, skin, face, eyes, hair style and color, top, bottom, shoes, hat, cape and their colors. The preview blinks, walks and shows hair and cloth in the wind.
+3. Play. Auto-battle (Q) fights, drinks potions and moves on to the next map once you reach its level.
 
 ## Classes
 
-The game opens on a class select screen. Each class only uses its own weapons and has four skills (the screen lists them all):
+Each class only uses its own weapons, has four skills and an ultimate:
 
-| Class | Main stat | Weapons | Skills |
+| Class | Main stat | Weapons | Skills | Ultimate |
+| --- | --- | --- | --- | --- |
+| Warrior | STR | Short Sword (start), Iron Hammer | Power Strike, Ground Slam, War Cry (+25% damage), Charge (dash through mobs) | Titan's Wrath: leap and quake, stuns everything nearby, then Berserk (+50% damage) |
+| Mage | INT | Oak Staff (+20% spell damage) | Fireball, Frost Bolt, Venom Glob, Chain Lightning | Arcane Cataclysm: a short channel, then a fire cone and lightning on every mob on the map |
+| Rogue | DEX | Dagger (start, stabs), Throwing Kunai | Lucky Seven (2 kunai), Venom Glob, Flurry (3 stabs), Haste (+30% attack speed) | Shadow Dance: vanish and blink between up to 8 mobs, 3 strikes each |
+
+Mages fight from range: they keep their distance and only walk in to melee when every spell is on cooldown. Skill slots show the seconds left on each cooldown.
+
+Stats: STR, DEX, INT, LUK. Every attack scales with its own stat; STR adds HP, INT adds MP, DEX and LUK add crit, LUK raises item drops. Each level gives 5 AP; auto-assign (on by default) spends 4 on the main stat and 1 on the secondary. Turn it off in the stats window (K) to spend them yourself.
+
+Magic combos: frost on a frozen mob crits more; lightning on a frozen mob always crits, splashes and shatters the ice; fire on a poisoned mob ignites the poison. Kunai carry the element of your last spell at half strength.
+
+## Maps and mobs
+
+| Map | Levels | Mobs | Boss |
 | --- | --- | --- | --- |
-| Warrior | STR | Short Sword (start), Iron Hammer | Power Strike, Ground Slam, War Cry (+25% damage), Charge (dash through mobs) |
-| Mage | INT | Oak Staff (+20% spell damage) | Fireball, Frost Bolt, Venom Glob, Chain Lightning |
-| Rogue | DEX | Dagger (start, stabs), Throwing Kunai | Lucky Seven (2 kunai), Venom Glob, Flurry (3 stabs), Haste (+30% attack speed) |
+| Mossy Meadow (town) | 1 to 5 | Green Slime, Blue Slime, Grumpy Stump | Slime Monarch (Lv 7) |
+| Mushroom Grove | 6 to 12 | Orange Shroom, Horny Shroom, Wild Boar | Elder Sporecap (Lv 13) |
+| Ember Crags | 13 to 20 | Fire Imp (resists fire), Lava Slime, Rock Golem | Cinder Colossus (Lv 21) |
+| Frostpeak Ruins | 21 to 30 | Frost Slime (resists frost), Skeleton (resists poison), Ice Golem | Bone Warden (Lv 31) |
 
-Stats: STR, DEX, INT, LUK. Every attack scales with its own stat; STR also adds HP, INT adds MP, DEX and LUK add crit, LUK raises item drops. Each level gives 5 AP; auto-assign (on by default) spends them 4 into the main stat and 1 into the secondary. Turn it off in the stats window (K) to spend them yourself.
+Portals show the destination's level range in a color for your level, and entering a map above you shows "Warning! Mobs here are N levels above you". Travel is a .hack-style warp: rings around the party, a shimmering sound, then the new map.
 
-Auto-battle moves on by itself: once you reach the next map's level it walks to the portal and goes through (`auto_advance_zones` in `data/balance.json`).
+Mob HP grows with player damage, so a mob at your level always takes about the same number of hits. XP drops off on mobs more than 3 levels under you and grows a little on mobs above you. Kills per level start around 8 and grow slowly.
 
-## What's in M0
+## Zone bosses
 
-- Side-view movement: acceleration, coyote time, jump buffering, short hops, one-way platforms you can jump up through and drop down from
-- Three weapons with real trade-offs (hold attack to keep swinging at the weapon's speed):
+After 30 kills on a map its boss appears: big, with an HP bar and an enrage timer across the top. Beat it in 90 seconds or it enrages (much harder hits, faster, more slams). It telegraphs a ground slam with a red ring; jump to dodge it (auto-battle and Simmos do). Bosses ignore freeze and stun. A full party takes about a minute.
 
-| Weapon | Speed | Swing delay | Damage per hit | Hits up to | Notes |
-| --- | --- | --- | --- | --- | --- |
-| Dagger | Fast | 0.55 s | 12 to 16 | 1 enemy | Short reach, light knockback |
-| Short Sword | Normal | 0.80 s | 19 to 25 | 2 enemies | Starting weapon |
-| Iron Hammer | Slow | 1.30 s | 34 to 44 | 4 enemies | 0.25 s wind-up, long reach, big knockback |
-| Throwing Kunai | Normal | 0.70 s | 15 to 21 | 1 enemy | Thrown in an arc aimed at the target, 170 px range. 50% chance to carry your last spell's element at half strength |
+The boss drops a chest that glows in the color of its best item. Loot is Diablo style:
 
-  Damage per second stays within about 20% across weapons, and the level bonus scales with swing time so slow weapons keep up as you level. All of it lives in `data/balance.json`; `attack_speed_scale` under `player` slows or speeds up every weapon at once (1.2 = 20% slower).
-- Magic (MP bar, regenerates over time; spells in `data/balance.json`):
-
-| Spell | Key | Element | MP | Cooldown | Effect |
-| --- | --- | --- | --- | --- | --- |
-| Fireball | Z | Fire | 6 | 4 s | Bolt. Burns for 4 dmg/s over 4 s. Thaws frozen and chilled targets |
-| Frost Bolt | X | Frost | 6 | 5 s | Bolt. Slows 45% for 3 s, 25% chance to freeze for 2 s |
-| Venom Glob | C | Poison | 5 | 3 s | Lobbed, splashes. Poison stacks up to 5, 2 dmg/s per stack for 6 s |
-| Chain Lightning | V | Lightning | 12 | 9 s | Instant. Hits the target and jumps to 3 more within 80 px, 25% less each jump |
-
-  Combos:
-
-| Combo | What happens |
-| --- | --- |
-| Frost on a frozen target | +50% crit chance |
-| Lightning on a frozen target (conduct) | Always crits, splashes 60% damage to mobs within 50 px, shatters the ice |
-| Fire on a poisoned target (ignite) | Poison bursts for 7 per stack to everything within 44 px |
-
-  Frozen mobs can't move or hurt you by touch. Auto-battle uses spells too and sets up combos (freeze then lightning, stack poison then fire), weaving them between weapon attacks. Spells share a 1 s global cooldown; a cast locks the weapon for 0.4 s. With the kunai it closes to about 60% of max range and keeps moving in while the throw cools down. Statuses show as pips above each mob.
-- Crits, knockback and floating damage numbers
-- Four maps joined by portals (`data/maps.json`). Stand on a portal and press Up; your party comes along:
-
-| Map | Levels | Mobs |
+| Rarity | Color | Bonuses |
 | --- | --- | --- |
-| Mossy Meadow (town) | 1 to 5 | Green Slime, Blue Slime, Grumpy Stump |
-| Mushroom Grove | 6 to 12 | Orange Shroom, Horny Shroom, Wild Boar |
-| Ember Crags | 13 to 20 | Fire Imp (resists fire), Lava Slime, Rock Golem (hard to knock back) |
-| Frostpeak Ruins | 21 to 30 | Frost Slime (resists frost), Skeleton (resists poison), Ice Golem |
+| Junk | Gray | None, vendor trash |
+| Common | White | Base bonus only |
+| Magic | Blue | +1 affix |
+| Rare | Yellow | +2 affixes |
+| Epic | Purple | +3 affixes |
+| Legendary | Orange | +4 affixes, a unique name and a special bonus |
 
-  Mobs wander, aggro when hit (some aggro on sight), respawn, and stop at the edge of their platform when knocked back, MapleStory style. Each shows its level under its feet: white near your level, orange a few levels above, red dangerous, gray far below.
-- Mob levels and XP (`mob_scaling` in `data/balance.json`): HP grows at the same rate as player damage and touch damage at the same rate as player HP, so a mob at your level always takes about the same number of hits. XP grows with the mob's level and toughness. Mobs more than 3 levels under you give less XP, down to 10%; mobs above you give up to 30% more. Progress comes from moving up to the next map. Kills per level on fitting mobs start around 8 and grow to about 40 by level 21.
-- Portals show the destination's level range, colored by danger for your level. You can always go through, but entering a map above your level shows a warning (orange: under its minimum level, red: 5 or more levels under).
-- Party (M1): three SimPlayers join you and follow you across platforms and through portals, using the same auto-battle brain as your AUTO mode:
+Gear (weapons for your class, rings, amulets) rolls STR / DEX / INT / LUK, damage %, crit %, HP and MP, stronger from higher-level bosses. Click it in your bag to equip.
 
-| Sim | Role | What it does |
-| --- | --- | --- |
-| Brannoc | Tank | Iron Hammer, 80% more HP, stands in front of you and goes for the mobs closest to you |
-| Liriel | Healer | Heals whoever drops under 65% HP, stands behind you, Frost Bolt and a sword for close mobs |
-| xXKunaiXx | Ranged | Throwing kunai plus Fireball and Venom Glob, climbs onto a platform above its target to throw from there |
+## Party (Simmos)
 
-  Kill XP is split across the party on the map, with a 20% bonus per extra member (a party of four gets 40% each). A sim at 0 HP is knocked out for 5 s and comes back next to you. Sims are drawn in paper-doll layers (hair style, hat, palette) from their `look` in `data/balance.json`. P sends them away or calls them back.
-- Auto-battle: runs to the nearest reachable enemy, jumps up or drops down to its platform and attacks. Moving by hand takes over movement while auto keeps swinging at anything in front of you; 0.4 s after you let go it picks the nearest mob from where you are. It routes with a navigation graph (`scripts/nav.gd`): jump up, jump across gaps, walk off edges or drop through, picking the shortest real route and the nearest mob by travel distance. Once it has hit a mob it stays on it until it dies, and it finishes wounded mobs (like the extras a hammer swing clips) before starting on fresh ones. It gives up on a mob it can't reach after 5 s
-- XP, leveling, HP growth, death and respawn at the map's entrance
-- Inventory (`data/items.json`): 24 slots, items stack. Party kills drop loot straight into it. You start with 10 Red Potions, 5 Blue Potions and 2 Scholar's Tonics:
+Three Simmos join you: Brannoc (Warrior tank), Liriel (Mage healer with Heal and Sanctuary) and xXKunaiXx (Rogue ranged). They follow you across platforms and through portals, fight by role (the tank in front, ranged and healer on your target, the ranged climbing onto platforms), use their ultimates, drink their own potions and ask for more when they run out. Kill XP is split with a party bonus. Invite and kick from the pause menu's Party tab; Goldvein and Fennick wait on the roster.
 
-| Item | Effect | Drops from |
-| --- | --- | --- |
-| Red Potion | +50 HP | Any mob (8%) |
-| White Potion | +200 HP | Lv 12+ mobs (6%) |
-| Blue Potion | +40 MP | Any mob (6%) |
-| Scholar's Tonic | +20% XP for 10 min | Any mob (1.2%) |
-| Sage's Elixir | +50% XP for 10 min | Lv 13+ mobs (0.4%) |
+Trade with T: click your items to offer, theirs to ask. Simmos accept gifts and fair deals and keep a couple of potions for themselves. They talk in party chat and in speech bubbles, without spamming.
 
-  R and F drink the best HP or MP potion for what you're missing. XP buffs don't stack; a weaker one won't replace a stronger one. During auto-battle you drink potions on your own under 35% HP or 20% MP.
-- Bottom status bar, wider screens show more of the world (fixed 360 px height, width expands)
+## Items
+
+24-slot bag, potions and tonics stack. Red / White Potions (HP), Blue Potion (MP), Scholar's Tonic (+20% XP for 10 min), Sage's Elixir (+50% XP). Mobs drop potions and tonics; bosses drop gear. Auto-battle drinks a potion under 35% HP or 20% MP.
+
+## Chat
+
+Bottom left, with tabs: All (no damage spam), Chat, Combat. Colors: white local (passers-by), blue party, yellow system, green XP, cyan loot (gear in its rarity color), orange your damage and kills, pink trades, red warnings.
+
+## World
+
+Day and night (8 minutes), with sun, moon and stars. Weather cycles through clear, cloudy, rain and storms with lightning and thunder; Frostpeak snows. Snow builds up on the ground and platforms and takes footprints. Ponds ripple when you wade through them (slower), rivers and lava have plank bridges. Grass and trees sway in the wind, and hair, capes and skirts move with it too. Lights: spells carry their own light, lightning lights its path, lamps glow at night, platforms cast shadows, and light catches the edges of characters.
+
+Characters blink now and then, walk with a swing, tuck their legs when jumping, and have hair and cloth physics.
+
+## Sound
+
+Every sound is synthesized in code: hits, crits, swings, footsteps, jumps, landings, spell casts by element, potions, loot, level ups, ultimates, warps, splashes, boss roars, the chest, thunder, and rain and wind ambience. The pause menu has master, effects and ambient volume and mute.
 
 ## Layout
 
 | Path | What |
 | --- | --- |
-| `data/balance.json` | All tuning numbers: player stats, weapons, spells, mobs, mob scaling, party, sim roles and looks |
-| `data/maps.json` | Maps: platforms, spawns, portals, level range, colors |
-| `data/items.json` | Items, loot table, starter kit, inventory size |
-| `scripts/` | Game code (actor, player, SimPlayer, brain, mob, world, navigation, HUD, logging, input) |
-| `tests/smoke_test.gd` | Headless test for movement, combat, weapons, auto-battle and pathing |
-| `tests/magic_test.gd` | Headless test for every status effect, combo, spell, mana and the kunai |
-| `tests/world_test.gd` | Headless test for map data, portals, mob scaling, XP rules and resists |
-| `tests/party_test.gd` | Headless test for SimPlayers: following, roles, healing, perching, XP share, knockouts, portals |
-| `tests/items_test.gd` | Headless test for the inventory, potions, XP tonics, loot, auto-potions, hotkeys and the window |
-| `tests/class_test.gd` | Headless test for the class select screen, weapon locks, stats and AP, every class skill and auto-advance |
-| `scripts/combat.gd` | Damage, element and combo rules shared by every attack |
-| `tools/screenshot.gd` | Renders screenshots at any resolution for layout checks |
+| `data/balance.json` | Tuning: player, classes, weapons, skills, mobs and bosses, scaling, party, Simmo roster, environment |
+| `data/maps.json` | Maps: platforms, spawns, portals, water, lamps, trees, climate, colors |
+| `data/items.json` | Potions, tonics, loot table, starter kits, trade rules |
+| `data/loot.json` | Boss loot: rarities, gear bases, affixes, legendary names |
+| `data/appearance.json` | Character creator options |
+| `data/chat.json` | Fake chat lines and chat colors |
+| `scripts/` | Game code (see CLAUDE.md for the map of files) |
+| `tests/` | Headless test suites, run by `./run.sh test` |
+| `tools/` | Screenshots, soak run, boss balance probe |
 
 ## Logging and debug mode
 

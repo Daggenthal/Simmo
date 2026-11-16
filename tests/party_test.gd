@@ -25,6 +25,7 @@ func _initialize() -> void:
 	var env_seed := OS.get_environment("SIMMO_SEED")
 	seed(int(env_seed) if env_seed != "" else 9001)
 	_main = load("res://main.tscn").instantiate()
+	_main.load_user_settings = false
 	_main.show_start_screen = false
 	_main.start_class = "warrior"
 	root.add_child(_main)
@@ -189,6 +190,8 @@ func _physics_process(_d: float) -> bool:
 				_kills0 = 0
 				for s in _main.sims:
 					_kills0 += s.kills
+					s.set_meta("dmg0", s.damage_dealt)
+				p.set_meta("dmg0", p.damage_dealt)
 			if _pf > 120:
 				for s in _main.sims:
 					if s.is_alive():
@@ -197,7 +200,13 @@ func _physics_process(_d: float) -> bool:
 				var k := 0
 				for s in _main.sims:
 					k += s.kills
-				_check(k - _kills0 >= 4, "sims fight on their own (%d kills in 40s)" % (k - _kills0))
+				# Kills go to the last hit, and the player often lands it; damage shows who really fought.
+				var dmg := []
+				for s in _main.sims:
+					dmg.append(s.damage_dealt - int(s.get_meta("dmg0")))
+				var pd: int = p.damage_dealt - int(p.get_meta("dmg0"))
+				_check(dmg.min() > 0 and dmg.reduce(func(a, b): return a + b) >= pd * 0.25,
+					"every Simmo fights on its own (damage %s vs player %d, %d Simmo kills)" % [str(dmg), pd, k - _kills0])
 				_check(_ever_far < 600.0, "sims never got lost while following (furthest %.0f px)" % _ever_far)
 				p.set_auto_battle(false)
 				_goto("knockout")
@@ -225,8 +234,8 @@ func _physics_process(_d: float) -> bool:
 				ev.action = "move_up"
 				ev.pressed = false
 				Input.parse_input_event(ev)
-			if _pf == 12:
-				# Right after arriving (they go fight nearby mobs soon after, which is fine).
+			if _pf == 5 + 72 + 8:
+				# Right after arriving (after the 1.2 s warp) (they go fight nearby mobs soon after, which is fine).
 				_check(world.map_id == "mushroom_grove", "player went through the portal (%s)" % world.map_id)
 				var near := 0
 				for s in _main.sims:

@@ -19,6 +19,7 @@ func _initialize() -> void:
 	Scal = load("res://scripts/scaling.gd")
 	_main = load("res://main.tscn").instantiate()
 	_main.spawn_sims = false
+	_main.load_user_settings = false
 	_main.show_start_screen = false
 	_main.start_class = "warrior"
 	root.add_child(_main)
@@ -69,8 +70,13 @@ func _physics_process(_d: float) -> bool:
 			if _pf == 10:
 				_check(not world.portal_at(p.global_position).is_empty(), "player stands on the portal")
 				_press_up()
-			if _pf == 20:
+			if _pf == 60:
+				# Mid-warp: the rings play out before the map changes.
+				_check(world.map_id == "mossy_meadow" and p.is_warping() and p.self_modulate.a < 1.0 and int(root.get_node("Sfx").played.get("warp_out", 0)) >= 1,
+					"the warp animation and sound play before the map changes (alpha %.2f)" % p.self_modulate.a)
+			if _pf == 100:
 				_check(world.map_id == "mushroom_grove", "Up on a portal travels to the next map (%s)" % world.map_id)
+				_check(p.is_warping() and int(root.get_node("Sfx").played.get("warp_in", 0)) >= 1, "and warps in on arrival")
 				_check(world.mobs.size() == world.spawns.size(), "new map spawns its own mobs (%d of %d)" % [world.mobs.size(), world.spawns.size()])
 				_check(not is_instance_valid(_old_mob) or not _old_mob.is_inside_tree(), "old map's mobs are gone")
 				var west: Dictionary = world.portals[0]
@@ -86,21 +92,21 @@ func _physics_process(_d: float) -> bool:
 				for m in world.mobs:
 					types[m.id] = true
 				_check(not types.has("green_slime") and types.size() >= 3, "new map has its own mob types (%s)" % str(types.keys()))
-			if _pf == 40:
+			if _pf == 200:
 				# And back again.
 				var west: Dictionary = world.portals[0]
 				p.position = Vector2(float(west.x), world.ground_y)
 				p.velocity = Vector2.ZERO
-			if _pf == 50:
+			if _pf == 210:
 				_press_up()
-			if _pf == 60:
+			if _pf == 300:
 				_check(world.map_id == "mossy_meadow", "west portal leads back (%s)" % world.map_id)
 				_check(_main.hud.warning_text == "", "no warning when entering a map at your level")
 				_check(absf(p.global_position.x - 1760.0) < 50.0, "and lands at the east portal (x=%.0f)" % p.global_position.x)
 				_goto("walk_portals")
 		"walk_portals":
 			# Ride every portal in a chain to the last map and check the player can stand there.
-			if _pf % 20 == 1:
+			if _pf % 140 == 1:
 				var east = null
 				for q in world.portals:
 					if q.name == "east":
@@ -111,9 +117,9 @@ func _physics_process(_d: float) -> bool:
 				else:
 					p.position = Vector2(float(east.x), world.ground_y)
 					p.velocity = Vector2.ZERO
-			if _pf % 20 == 8:
+			if _pf % 140 == 8:
 				_press_up()
-			if _pf % 20 == 18:
+			if _pf % 140 == 130:
 				_check(p.is_on_floor() or p.velocity.y >= 0.0, "player is fine after entering %s (y=%.0f)" % [world.map.name, p.position.y])
 		"done":
 			if _failures == 0:
@@ -121,7 +127,7 @@ func _physics_process(_d: float) -> bool:
 			else:
 				_log.error("%d WORLD CHECK(S) FAILED" % _failures)
 			quit(1 if _failures > 0 else 0)
-	if _frame > 3000:
+	if _frame > 6000:
 		_log.error("timeout in phase " + _phase)
 		quit(1)
 	return false

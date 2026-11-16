@@ -19,6 +19,7 @@ func _initialize() -> void:
 	InvS = load("res://scripts/inventory.gd")
 	_main = load("res://main.tscn").instantiate()
 	_main.spawn_sims = false
+	_main.load_user_settings = false
 	_main.show_start_screen = false
 	_main.start_class = "warrior"
 	root.add_child(_main)
@@ -59,6 +60,7 @@ func _physics_process(_d: float) -> bool:
 			if _pf == 5:
 				_park_all()
 				_check_inventory()
+				_check_audit(p)
 				_check_potions(p)
 				_goto("tonic")
 		"tonic":
@@ -140,6 +142,50 @@ func _check_inventory() -> void:
 	_check(inv.add("red_potion", 60) == 50, "but tops up an existing stack (50 of 60 fit)")
 	_check(inv.remove("red_potion", 120) == 120 and inv.count("red_potion") == 80, "removing takes from stacks (200 -> 80)")
 
+## Edge cases found while auditing the inventory and trades.
+func _check_audit(p) -> void:
+	var TradeS = load("res://scripts/trade.gd")
+	var inv = InvS.new(_main.items.items, 3)
+	_check(inv.add("red_potion", 0) == 0 and inv.add("red_potion", -5) == 0 and inv.count("red_potion") == 0, "adding 0 or a negative count adds nothing")
+	_check(inv.remove("red_potion", 3) == 0, "removing what you don't have removes nothing")
+	_log.warn("Expected: the next line reports an unknown item on purpose")
+	_check(inv.add("no_such_item", 1) == 0 and inv.remove("no_such_item", 1) == 0, "unknown items are refused")
+	inv.add("xp_tonic", 25)
+	_check(inv.count("xp_tonic") == 25 and inv.slots[1] != null and int(inv.slots[0].count) == 20, "stacks cap at the item's stack size (20 tonics per slot)")
+	_check(not inv.is_full_for("xp_tonic") and not inv.is_full_for("red_potion"), "a partial stack or empty slot means not full")
+	# Trades: all or nothing.
+	var a = InvS.new(_main.items.items, 1)
+	var b = InvS.new(_main.items.items, 4)
+	a.add("red_potion", 100)
+	b.add("blue_potion", 3)
+	_check(TradeS.execute(a, b, {"red_potion": 5}, {"blue_potion": 1}) == "full" and a.count("red_potion") == 100 and b.count("blue_potion") == 3,
+		"a trade into a full bag fails and nobody loses items")
+	_check(TradeS.execute(a, b, {"white_potion": 1}, {}) == "missing", "you can't offer items you don't have")
+	_check(TradeS.execute(a, b, {"red_potion": 100}, {"blue_potion": 3}) == "" and a.count("blue_potion") == 3 and b.count("red_potion") == 100,
+		"a trade that fits swaps both sides")
+	# Sims judge trades.
+	var cfg: Dictionary = _main.items.trade
+	var sim = InvS.new(_main.items.items, 24)
+	sim.add("red_potion", 3)
+	sim.add("xp_tonic", 1)
+	_check(TradeS.sim_verdict(sim, {}, {"red_potion": 1}, cfg) == "", "sims always take a gift")
+	_check(TradeS.sim_verdict(sim, {"xp_tonic": 1}, {"red_potion": 1}, cfg) == "unfair", "sims refuse a lopsided deal (tonic for one red potion)")
+	_check(TradeS.sim_verdict(sim, {"red_potion": 2}, {"white_potion": 1}, cfg) == "", "sims accept a fair deal (2 red for a white)")
+	_check(TradeS.sim_verdict(sim, {"red_potion": 2}, {"blue_potion": 3}, cfg) == "needs", "sims keep their last 2 HP potions")
+	# A potion at 0 HP is not wasted.
+	p._item_cd = 0.0
+	var hp0: int = p.hp
+	var n0: int = p.inventory.count("red_potion")
+	p.hp = 0
+	_check(p.use_item("red_potion") != "" and p.inventory.count("red_potion") == n0, "a potion isn't used up at 0 HP")
+	p.hp = hp0
+	# The window forgets its hover when closed.
+	var ui = _main.inventory_ui
+	ui.visible = true
+	ui._hover = 3
+	ui.visible = false
+	_check(ui._hover == -1, "closing the inventory window clears the hovered slot")
+
 func _check_potions(p) -> void:
 	p._item_cd = 0.0
 	p.hp = 10
@@ -160,7 +206,7 @@ func _check_potions(p) -> void:
 	_check(p.best_item("heal_hp") == "white_potion", "180 HP missing: picks the White Potion")
 	p.hp = 10
 	_check(p.best_item("heal_hp") == "white_potion", "390 HP missing: picks the biggest")
-	p.max_hp = int(p.cfg.max_hp)
+	p.recalc()
 	p.hp = p.max_hp
 	p.inventory.remove("white_potion", 2)
 

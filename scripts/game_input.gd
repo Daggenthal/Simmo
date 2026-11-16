@@ -25,6 +25,9 @@ const BINDINGS := {
 	"party_toggle": [KEY_P],
 	"inventory_toggle": [KEY_I],
 	"stats_toggle": [KEY_K],
+	"ultimate": [KEY_G],
+	"trade_toggle": [KEY_T],
+	"chat_tab": [KEY_Y],
 	"potion_hp": [KEY_R],
 	"potion_mp": [KEY_F],
 }

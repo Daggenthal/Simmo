@@ -134,7 +134,38 @@
           "to": "mushroom_grove",
           "to_portal": "west"
         }
-      ]
+      ],
+      "water": [
+        [
+          640,
+          720,
+          "pond"
+        ],
+        [
+          1110,
+          1170,
+          "river"
+        ]
+      ],
+      "lamps": [
+        [
+          250,
+          330
+        ],
+        [
+          880,
+          330
+        ],
+        [
+          1500,
+          330
+        ],
+        [
+          1030,
+          208
+        ]
+      ],
+      "trees": "oak"
     },
     "mushroom_grove": {
       "name": "Mushroom Grove",
@@ -308,7 +339,38 @@
           "to": "ember_crags",
           "to_portal": "west"
         }
-      ]
+      ],
+      "water": [
+        [
+          470,
+          560,
+          "pond"
+        ],
+        [
+          1430,
+          1490,
+          "river"
+        ]
+      ],
+      "lamps": [
+        [
+          120,
+          330
+        ],
+        [
+          860,
+          330
+        ],
+        [
+          1340,
+          330
+        ],
+        [
+          770,
+          150
+        ]
+      ],
+      "trees": "oak"
     },
     "ember_crags": {
       "name": "Ember Crags",
@@ -492,7 +554,30 @@
           "to": "frostpeak_ruins",
           "to_portal": "west"
         }
-      ]
+      ],
+      "water": [
+        [
+          1100,
+          1180,
+          "lava"
+        ]
+      ],
+      "lamps": [
+        [
+          120,
+          330
+        ],
+        [
+          700,
+          330
+        ],
+        [
+          1400,
+          330
+        ]
+      ],
+      "trees": "dead",
+      "climate": "dry"
     },
     "frostpeak_ruins": {
       "name": "Frostpeak Ruins",
@@ -680,7 +765,40 @@
           "to": "ember_crags",
           "to_portal": "east"
         }
-      ]
+      ],
+      "water": [
+        [
+          480,
+          540,
+          "ice"
+        ],
+        [
+          1560,
+          1620,
+          "river"
+        ]
+      ],
+      "lamps": [
+        [
+          120,
+          330
+        ],
+        [
+          1000,
+          330
+        ],
+        [
+          1800,
+          330
+        ],
+        [
+          1270,
+          150
+        ]
+      ],
+      "trees": "pine",
+      "climate": "snow"
     }
-  }
+  },
+  "_doc_world": "water: [x0, x1, kind] on the ground line. pond = wade through (slower, ripples), river = under a plank bridge, ice = frozen pond (slippery look), lava = glowing, hurts. lamps: [x, surface y] light up at night. trees: oak / pine / dead. climate: snow (snows instead of raining), dry (no rain)."
 }

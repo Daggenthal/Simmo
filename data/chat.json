@@ -1,0 +1,115 @@
+{
+  "_doc": "Fake chat. Local lines come from passers-by every local_every seconds (random within the range). Party lines are sims reacting to events. {name} = speaker, {player} = you, {item}, {map}.",
+  "colors": {
+    "local": "#ffffff",
+    "party": "#6fb7ff",
+    "system": "#ffd84a",
+    "xp": "#9be37d",
+    "loot": "#7fe3e3",
+    "combat": "#ffb07a",
+    "trade": "#ff9be3",
+    "warning": "#ff7a5a"
+  },
+  "local_every": [
+    6,
+    16
+  ],
+  "passersby": [
+    "Mapl3Lord",
+    "xXSlayerXx",
+    "Noodlecat",
+    "Ravenwyn",
+    "Pepperjack",
+    "Kirito_2",
+    "SirLagsALot",
+    "Moonbeam",
+    "OrangeShroomFan",
+    "Dagnir",
+    "HealPlz",
+    "Zoomies"
+  ],
+  "local": [
+    "anyone selling white pots?",
+    "lf party for crags",
+    "LOL",
+    "brb dinner",
+    "who has the best farming spot here",
+    "gm",
+    "buying xp tonics, pm me",
+    "this map is so crowded today",
+    "just hit lvl {lvl} finally",
+    "does anyone know where the boss spawns",
+    "wts sage's elixir 180",
+    "lag?",
+    "the slimes here are brutal lol",
+    "ty for the heal stranger",
+    "new patch when"
+  ],
+  "party": {
+    "join": [
+      "hey! ready when you are",
+      "let's go",
+      "sup, ready to grind"
+    ],
+    "level_up": [
+      "grats {player}!",
+      "gz!!",
+      "nice level"
+    ],
+    "own_level": [
+      "ding! level {lvl}",
+      "lvl {lvl} :)"
+    ],
+    "low_hp": [
+      "need heal!!",
+      "ouch, low hp",
+      "getting wrecked over here"
+    ],
+    "out_of_potions": [
+      "out of red pots, anyone spare one?",
+      "can someone trade me a potion?",
+      "no pots left :("
+    ],
+    "ultimate": [
+      "ULT!",
+      "here goes nothing",
+      "{ult}!!"
+    ],
+    "map": [
+      "{map}, here we go",
+      "new zone!",
+      "ooh {map}"
+    ],
+    "loot": [
+      "nice drop!",
+      "ooh {item}",
+      "lucky"
+    ],
+    "idle": [
+      "this is a good spot",
+      "anyone need anything?",
+      "love this party",
+      "{player} you're carrying lol",
+      "pots are cheap in town btw"
+    ],
+    "trade_yes": [
+      "thanks!",
+      "deal",
+      "ty ty"
+    ],
+    "trade_no": [
+      "hmm, not worth it for me",
+      "no thanks",
+      "I need those"
+    ],
+    "trade_gift": [
+      "aww thanks!",
+      "you're the best",
+      "ty!!"
+    ]
+  },
+  "party_every": [
+    14,
+    30
+  ]
+}

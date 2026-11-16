@@ -10,6 +10,7 @@ func _initialize() -> void:
 	root.size = Vector2i(1280, 720)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://screenshots"))
 	_main = load("res://main.tscn").instantiate()
+	_main.load_user_settings = false
 	_main.show_start_screen = false
 	root.add_child(_main)
 

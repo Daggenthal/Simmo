@@ -39,6 +39,7 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://screenshots"))
 	_main = load("res://main.tscn").instantiate()
 	_main.start_map = _map
+	_main.load_user_settings = false
 	_main.show_start_screen = _start
 	_main.start_class = _class
 	root.add_child(_main)

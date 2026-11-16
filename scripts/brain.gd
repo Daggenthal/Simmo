@@ -26,6 +26,8 @@ var _ignored: Dictionary = {} # mob -> seconds left; targets we gave up on
 var _leader_surface := -1
 var _perch: Dictionary = {}   # {id, x, y} surface a ranged sim throws from
 var _perch_check := 0.0
+## A perch closer than this (route cost) is worth climbing to even when you could throw from the ground.
+const PERCH_HOP := 220.0
 
 func _init(actor: Actor) -> void:
 	a = actor
@@ -57,6 +59,12 @@ func think(delta: float) -> Dictionary:
 		_ignored[target] = 4.0
 		target = null
 	var following := has_leader()
+	if a.can_ultimate() and should_ultimate():
+		i.ult = true
+	# A boss slam is about to land and we're inside its ring: jump over the shockwave.
+	if a.is_on_floor() and _slam_incoming():
+		i.jump = true
+		return i
 	if following:
 		if leader.is_on_floor() and a.world:
 			_leader_surface = a.world.nav.surface_at(leader.global_position.x, leader.global_position.y)
@@ -94,9 +102,15 @@ func think(delta: float) -> Dictionary:
 		# Combo finishers (lightning on frozen, fire on stacked poison) beat a weapon swing;
 		# other spells wait until the weapon is busy.
 		var pick := pick_spell(t)
-		if pick != "" and (not weapon_ready or is_combo_finisher(pick, t)):
+		if pick != "" and (not weapon_ready or is_combo_finisher(pick, t) or is_caster()):
 			i.spell = pick
 			_chase_time = 0.0
+	# Casters (INT classes) fight from range with spells; they only walk in to melee
+	# when every attack spell is on cooldown or out of MP.
+	if is_caster() and not thrown and a.is_on_floor() and a.world:
+		var ranged := _caster_step(i, t, dx)
+		if not ranged.is_empty():
+			return ranged
 	# Ranged role: get up on a perch above the target, throwing on the way when it can.
 	# Targets get knocked around, so re-pick the perch when it stops covering the target.
 	_perch_check -= delta
@@ -104,11 +118,14 @@ func think(delta: float) -> Dictionary:
 		_perch_check = 0.5
 		_perch = _find_perch(t)
 	if thrown and role == "ranged" and a.is_on_floor() and not _perch.is_empty() and a.world:
+		# Throw whenever the target is in reach, even on the move.
 		if weapon_can_hit and a._attack_cd <= 0.0:
 			i.attack = true
 			_chase_time = 0.0
+		# Climb to the perch if it's a short hop, or if you can't hit from here.
 		var my_s := a.world.nav.surface_at(x, a.global_position.y)
-		if my_s != int(_perch.id):
+		var go_perch: bool = my_s != int(_perch.id) and (not weapon_can_hit or float(_perch.get("cost", INF)) <= PERCH_HOP)
+		if go_perch:
 			_nav_link = {}
 			return _route_to(i, int(_perch.id), float(_perch.x))
 		if weapon_can_hit:
@@ -146,6 +163,80 @@ func think(delta: float) -> Dictionary:
 		i.dir = signf(dx)
 		return i
 	return _take_link(i, route.links[0])
+
+func _slam_incoming() -> bool:
+	if a.world == null:
+		return false
+	var b = a.world.boss
+	if b == null or not is_instance_valid(b) or not b.alive or b.slam_t <= 0.0 or b.slam_t > 0.22:
+		return false
+	var r := float(b.boss_cfg.get("slam_radius", 110.0))
+	return absf(b.global_position.x - a.global_position.x) <= r + 8.0 and absf(b.global_position.y - a.global_position.y) < 30.0
+
+func is_caster() -> bool:
+	return String(a.class_cfg.get("primary", "")) == "int"
+
+const ATTACK_KINDS := ["bolt", "lob", "chain"]
+
+## True when no attack spell can be cast soon (all cooling down for more than a moment, or no MP).
+func spells_all_cooling() -> bool:
+	for id in a.spells:
+		var sp: Dictionary = a.spells[id]
+		if String(sp.kind) in ATTACK_KINDS and a.spell_cd[id] <= 0.6 and a.mp >= float(sp.mp):
+			return false
+	return true
+
+## Keep a casting distance on the target's surface. Returns {} to fall back to the melee logic.
+func _caster_step(i: Dictionary, t: Mob, dx: float) -> Dictionary:
+	if spells_all_cooling():
+		return {}
+	var my_s := a.world.nav.surface_at(a.global_position.x, a.global_position.y)
+	var t_s := a.world.nav.surface_at(t.global_position.x, mob_surface_y(t))
+	if my_s != t_s and absf(mob_surface_y(t) - a.global_position.y) > 22.0:
+		return {}  # get onto its level first (the normal route logic), then cast
+	var keep := float(a.cfg.get("mage_keep_distance", 110.0))
+	var close := float(a.cfg.get("mage_too_close", 45.0))
+	var dist := absf(dx)
+	a.facing = 1 if dx >= 0.0 else -1
+	if dist > keep + 15.0:
+		i.dir = signf(dx)
+	elif dist < close:
+		var back := -signf(dx)
+		var surf: Dictionary = a.world.nav.surfaces[my_s] if my_s >= 0 else {}
+		var room: bool = not surf.is_empty() and a.global_position.x + back * 24.0 > float(surf.x0) + 6.0 and a.global_position.x + back * 24.0 < float(surf.x1) - 6.0
+		if room:
+			i.dir = back
+		elif a._mob_in_front():
+			i.attack = true
+	_chase_time = 0.0
+	return i
+
+## Fire the ultimate on a crowd, a tough target, or (healers) a hurting party.
+func should_ultimate() -> bool:
+	var ucfg: Dictionary = a._balance.get("ultimate", {})
+	if String(a.ult.get("ult", "")) == "sanctuary":
+		if a.world == null:
+			return false
+		var hurt := 0
+		for m in a.world.party:
+			if is_instance_valid(m) and m.is_inside_tree() and m.is_alive():
+				var f := float(m.hp) / float(m.max_hp)
+				if f < 0.25:
+					return true
+				if f < 0.5:
+					hurt += 1
+		return hurt >= 2
+	var near := 0
+	var r := float(ucfg.get("range", 180.0))
+	for m in a.get_tree().get_nodes_in_group("mobs"):
+		if m.alive and m.global_position.distance_to(a.global_position) <= r:
+			near += 1
+	if near >= int(ucfg.get("min_mobs", 3)):
+		return true
+	if target and is_instance_valid(target) and target.alive and target.global_position.distance_to(a.global_position) <= r:
+		var per_hit := float(a.damage_range(a.weapon).y)
+		return float(target.hp) > per_hit * float(ucfg.get("tough_hits", 6))
+	return false
 
 func _air(i: Dictionary) -> Dictionary:
 	if not _nav_link.is_empty():
@@ -261,7 +352,7 @@ func _find_perch(t: Mob) -> Dictionary:
 		var cost: float = nav.find_route(my_s, a.global_position.x, s.id, px).cost if my_s >= 0 else INF
 		if cost < best_cost:
 			best_cost = cost
-			best = {"id": s.id, "x": px, "y": float(s.y)}
+			best = {"id": s.id, "x": px, "y": float(s.y), "cost": cost}
 	return best
 
 func _perch_covers(perch: Dictionary, t: Mob) -> bool:
@@ -329,6 +420,23 @@ static func is_combo_finisher(id: String, t: Mob) -> bool:
 static func mob_surface_y(m: Mob) -> float:
 	return m.global_position.y if m.is_on_floor() else m.home.y
 
+## What the leader is fighting: their auto-battle target, or the closest mob in front of them.
+func _leader_target() -> Mob:
+	if not has_leader():
+		return null
+	var lt: Mob = leader.brain.target if leader.brain else null
+	if lt and is_instance_valid(lt) and lt.alive:
+		return lt
+	var best: Mob = null
+	var best_d := 80.0
+	for m in a.get_tree().get_nodes_in_group("mobs"):
+		if m.alive:
+			var d: float = (m.global_position.x - leader.global_position.x) * leader.facing
+			if d > -6.0 and d < best_d and absf(m.global_position.y - leader.global_position.y) < 30.0:
+				best_d = d
+				best = m
+	return best
+
 ## Nearest live mob by travel cost along the nav graph. Unreachable mobs are skipped.
 ## With a leader, only mobs near the leader count; tanks also weigh distance to the leader.
 func _pick_target() -> Mob:
@@ -342,7 +450,7 @@ func _pick_target() -> Mob:
 	for m in a.get_tree().get_nodes_in_group("mobs"):
 		if not m.alive or _ignored.has(m):
 			continue
-		if following and m.global_position.distance_to(leader.global_position) > engage:
+		if following and not m.is_boss and m.global_position.distance_to(leader.global_position) > engage:
 			continue
 		var cost: float
 		if world and my_s >= 0:
@@ -357,8 +465,19 @@ func _pick_target() -> Mob:
 			cost -= float(cfg.get("auto_wounded_bonus", 150.0))
 		if m == target:
 			cost -= float(cfg.get("auto_stick_bonus", 40.0))
+		# A zone boss is everyone's focus.
+		if m.is_boss:
+			cost -= 2000.0
 		if following and role == "tank":
 			cost += m.global_position.distance_to(leader.global_position)
+		# Ranged: a mob you can hit from right here beats one you'd have to walk to.
+		if role == "ranged" and a.weapon.get("thrown", false):
+			var rdx: float = absf(m.global_position.x - a.global_position.x)
+			if rdx <= float(a.weapon.range) and absf(mob_surface_y(m) - a.global_position.y) < 90.0:
+				cost -= 300.0
+		# Assist: ranged and healers hit whatever the leader is fighting, so damage stacks up.
+		if following and role in ["ranged", "healer"] and m == _leader_target():
+			cost -= 400.0
 		if cost < best_cost:
 			best_cost = cost
 			best = m

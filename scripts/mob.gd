@@ -39,6 +39,15 @@ var poison_stacks := 0
 var poison_dps := 0.0
 var poison_t := 0.0
 var _dot_acc := 0.0
+var stun_t := 0.0
+# Bosses (data.boss): big, chase the party, telegraphed slams, an enrage timer (the DPS check).
+var is_boss := false
+var boss_cfg: Dictionary = {}
+var boss_time := 0.0       # seconds since it appeared
+var enraged := false
+var slam_t := 0.0          # > 0 while a slam is winding up (telegraph)
+var _slam_cd := 4.0
+var slams := 0
 var _last_attacker: Node2D = null
 var dot_damage_taken := 0
 var level := 1
@@ -50,6 +59,7 @@ func setup(mob_id: String, mob_data: Dictionary, spawn: Vector2, gravity: float)
 	data = mob_data
 	level = int(data.get("level", 1))
 	shape_kind = String(data.get("shape", "slime"))
+	is_boss = bool(data.get("boss", false))
 	max_hp = int(data.hp)
 	hp = max_hp
 	size = Vector2(data.size[0], data.size[1])
@@ -105,10 +115,22 @@ func apply_chill(slow: float, duration: float) -> void:
 	chill_t = maxf(chill_t, duration)
 
 func apply_freeze(duration: float) -> void:
+	if is_boss:
+		return  # and freezes (chill still slows them)
 	if frozen_t <= 0.0:
 		FloatText.spawn(get_parent(), global_position + Vector2(0, -size.y - 14), "FROZEN", Combat.element_color("frost"), 0.9)
 	frozen_t = maxf(frozen_t, duration)
 	velocity = Vector2.ZERO
+
+## Stunned: can't move or hurt anyone by touch (Titan's Wrath). Stars spin over its head.
+func apply_stun(duration: float) -> void:
+	if is_boss:
+		return  # bosses shrug off stuns
+	stun_t = maxf(stun_t, duration)
+	velocity.x = 0.0
+
+func is_stunned() -> bool:
+	return stun_t > 0.0
 
 func thaw() -> void:
 	frozen_t = 0.0
@@ -128,6 +150,7 @@ func clear_statuses() -> void:
 	burn_t = 0.0
 	chill_t = 0.0
 	frozen_t = 0.0
+	stun_t = 0.0
 	clear_poison()
 	_dot_acc = 0.0
 
@@ -135,6 +158,7 @@ func clear_statuses() -> void:
 func _tick_statuses(delta: float) -> void:
 	chill_t = maxf(chill_t - delta, 0.0)
 	frozen_t = maxf(frozen_t - delta, 0.0)
+	stun_t = maxf(stun_t - delta, 0.0)
 	if burn_t <= 0.0 and poison_t <= 0.0:
 		_dot_acc = 0.0
 		return
@@ -178,8 +202,15 @@ func _physics_process(delta: float) -> void:
 	_squash = move_toward(_squash, 0.0, delta * 4.0)
 	velocity.y += _gravity * delta
 
-	var speed := float(data.speed) * (1.0 - chill_slow if chill_t > 0.0 else 1.0)
-	if frozen_t > 0.0:
+	var speed := float(data.speed) * (1.0 - chill_slow * (0.5 if is_boss else 1.0) if chill_t > 0.0 else 1.0)
+	if is_boss:
+		speed *= _boss_tick(delta)
+		if slam_t > 0.0:
+			velocity.x = 0.0
+			move_and_slide()
+			queue_redraw()
+			return
+	if frozen_t > 0.0 or stun_t > 0.0:
 		velocity.x = 0.0
 		velocity.y += _gravity * delta
 		move_and_slide()
@@ -234,12 +265,59 @@ func _update_aggro() -> void:
 			_aggro = a
 
 func _touch_player() -> void:
-	if frozen_t > 0.0 or int(data.touch_damage) <= 0:
+	if frozen_t > 0.0 or stun_t > 0.0 or int(data.touch_damage) <= 0:
 		return
 	for p in get_tree().get_nodes_in_group("actors"):
 		var pr := Rect2(p.global_position + Vector2(-Actor.W / 2.0, -Actor.H), Vector2(Actor.W, Actor.H))
 		if pr.intersects(hurt_rect().grow(-1)):
-			p.take_damage(int(data.touch_damage), global_position.x)
+			p.take_damage(touch_damage(), global_position.x)
+
+func touch_damage() -> int:
+	return int(round(float(data.touch_damage) * (float(boss_cfg.get("enrage_damage", 1.0)) if enraged else 1.0)))
+
+## Seconds left before the boss enrages (0 once enraged).
+func enrage_left() -> float:
+	return maxf(float(boss_cfg.get("enrage_time", 90.0)) - boss_time, 0.0)
+
+## Boss timers: enrage, picking the closest party member, telegraphed slams. Returns the speed factor.
+func _boss_tick(delta: float) -> float:
+	boss_time += delta
+	if not enraged and boss_time >= float(boss_cfg.get("enrage_time", 90.0)):
+		enraged = true
+		ChatLog.add("warning", "%s is ENRAGED! It hits much harder now." % data.name)
+		Sfx.play("boss_roar")
+		FloatText.spawn(get_parent(), global_position + Vector2(0, -size.y - 20), "ENRAGED!", Color("#ff3a3a"), 2.0)
+	# Always on the nearest party member.
+	var best := 1e9
+	for a in get_tree().get_nodes_in_group("actors"):
+		var d: float = a.global_position.distance_to(global_position)
+		if a.visible and d < best:
+			best = d
+			_aggro = a
+	# Slam: wind up (the telegraph ring), then a shockwave along the ground. Jump to dodge.
+	var every := float(boss_cfg.get("slam_every", 7.0)) * (0.5 if enraged else 1.0)
+	if slam_t > 0.0:
+		slam_t -= delta
+		if slam_t <= 0.0:
+			_slam()
+	else:
+		_slam_cd -= delta
+		var r := float(boss_cfg.get("slam_radius", 110.0))
+		if _slam_cd <= 0.0 and is_instance_valid(_aggro) and best < r * 0.9 and is_on_floor():
+			_slam_cd = every
+			slam_t = float(boss_cfg.get("slam_telegraph", 1.0))
+	return float(boss_cfg.get("enrage_speed", 1.0)) if enraged else 1.0
+
+func _slam() -> void:
+	slams += 1
+	var r := float(boss_cfg.get("slam_radius", 110.0))
+	Fx.burst(get_parent(), global_position, r, Color("#ff7a3a"))
+	Lighting.flash(get_parent(), global_position + Vector2(0, -8), Color("#ff9a5a"), r * 1.6, 1.4, 0.4)
+	Sfx.play("ultimate", 0.7, 0.6)
+	var dmg := int(round(touch_damage() * float(boss_cfg.get("slam_damage_mult", 1.5))))
+	for a in get_tree().get_nodes_in_group("actors"):
+		if a.visible and a.is_on_floor() and absf(a.global_position.x - global_position.x) <= r and absf(a.global_position.y - global_position.y) < 30.0:
+			a.take_damage(dmg, global_position.x)
 
 func take_hit(amount: int, crit: bool, from_dir: int, attacker: Node2D, knockback := 120.0, element := "physical") -> void:
 	if not alive:
@@ -266,6 +344,7 @@ func _die(attacker: Node2D) -> void:
 	clear_statuses()
 	set_physics_process(false)
 	collision_mask = 0
+	Sfx.play("mob_die", 0.7, randf_range(0.85, 1.15))
 	killed.emit(self, attacker)
 
 func respawn() -> void:
@@ -289,7 +368,15 @@ func _draw() -> void:
 		c = c.lerp(Color("#9fe0ff"), 0.45)
 	if burn_t > 0.0 and _flash <= 0.0:
 		c = c.lerp(Color("#ff8a3d"), 0.3)
+	if is_boss:
+		_draw_boss_under(body)
+	if enraged and _flash <= 0.0:
+		c = c.lerp(Color("#ff3a2a"), 0.35 + 0.1 * sin(Time.get_ticks_msec() / 120.0))
 	_draw_body(body, c, s)
+	if is_boss and bool(data.get("crown", false)):
+		var top := body.position.y
+		draw_colored_polygon(PackedVector2Array([Vector2(-10, top + 2), Vector2(-10, top - 6), Vector2(-5, top - 2), Vector2(0, top - 9), Vector2(5, top - 2), Vector2(10, top - 6), Vector2(10, top + 2)]), Color("#e8c34a"))
+		draw_circle(Vector2(0, top - 4), 1.5, Color("#c43b3b"))
 	_draw_statuses(body)
 	if _hp_bar_time > 0.0:
 		var w := maxf(s.x, 20.0)
@@ -297,6 +384,19 @@ func _draw() -> void:
 		draw_rect(Rect2(-w / 2.0, y, w, 3), Color(0, 0, 0, 0.7))
 		draw_rect(Rect2(-w / 2.0, y, w * clampf(float(hp) / max_hp, 0.0, 1.0), 3), Color("#e04848"))
 	_draw_label()
+
+## Boss extras under the body: the slam telegraph (a red ring growing to the slam's reach) and an enrage aura.
+func _draw_boss_under(body: Rect2) -> void:
+	if slam_t > 0.0:
+		var r := float(boss_cfg.get("slam_radius", 110.0))
+		var t := 1.0 - slam_t / float(boss_cfg.get("slam_telegraph", 1.0))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.18))
+		draw_circle(Vector2.ZERO, r, Color(1.0, 0.2, 0.1, 0.12))
+		draw_arc(Vector2.ZERO, r * t, 0, TAU, 40, Color(1.0, 0.3, 0.2, 0.8), 3.0)
+		draw_arc(Vector2.ZERO, r, 0, TAU, 40, Color(1.0, 0.3, 0.2, 0.5), 1.5)
+		draw_set_transform(Vector2.ZERO)
+	if enraged:
+		draw_circle(Vector2(0, body.position.y + body.size.y / 2.0), body.size.x * 0.7, Color(1.0, 0.15, 0.1, 0.12))
 
 ## "Lv.N" under the feet, colored by how dangerous the mob is for the player; the name shows while hurt.
 func _draw_label() -> void:
@@ -384,6 +484,11 @@ func _draw_body(body: Rect2, c: Color, s: Vector2) -> void:
 func _draw_statuses(body: Rect2) -> void:
 	var t := Time.get_ticks_msec() / 1000.0
 	_draw_status_pips(body)
+	if stun_t > 0.0:
+		for k in 3:
+			var a := t * 5.0 + k * TAU / 3.0
+			var sp := Vector2(cos(a) * 7.0, body.position.y - 6 + sin(a) * 2.0)
+			draw_rect(Rect2(sp - Vector2(1.5, 1.5), Vector2(3, 3)), Color("#ffe66b"))
 	if frozen_t > 0.0:
 		var ice := body.grow(2)
 		draw_rect(ice, Color(0.75, 0.92, 1.0, 0.45))

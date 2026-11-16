@@ -13,16 +13,27 @@ var show_help := true
 const HELP_LINES := [
 	"Move: Arrows / WASD    Jump: Alt / Space    Attack: Ctrl / J",
 	"Drop down: Down + Jump    Auto-battle: Q / Tab    Weapons: 1-2 or E",
-	"Skills: Z / X / C / V    Stats: K",
+	"Skills: Z X C V    Ultimate: G    Stats: K",
 	"Portal: stand on it + Up    Party on/off: P",
-	"Inventory: I    HP potion: R    MP potion: F",
+	"Inventory: I    HP potion: R    MP potion: F    Trade: T    Chat tab: Y",
 	"Respawn mobs: F5    Debug: F3    Hide this: F1",
 ]
 const SLOT_KEYS := ["Z", "X", "C", "V"]
 var _font: Font
 var _auto_btn: Button
 
+var _flash_col := Color.TRANSPARENT
+var _flash_t := 0.0
+var _flash_len := 1.0
+
+## Full-screen flash that fades out (ultimates).
+func flash(col: Color, duration: float) -> void:
+	_flash_col = col
+	_flash_t = duration
+	_flash_len = duration
+
 func _ready() -> void:
+	add_to_group("hud")
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_font = ThemeDB.fallback_font
@@ -52,6 +63,7 @@ func on_map_entered() -> void:
 	# Gap to the map's weakest mobs; the banner color still shows hard (orange) vs deadly (red).
 	warning_text = warning_for(int(world.map.levels[0]) - player.level)
 	_warning_t = float(world._balance.get("map_warning", {}).get("banner_time", 6.0))
+	ChatLog.add("warning", warning_text)
 
 ## "Warning! Mobs here are N level(s) above you", singular for one level.
 func warning_for(gap: int) -> String:
@@ -60,6 +72,7 @@ func warning_for(gap: int) -> String:
 func _process(delta: float) -> void:
 	_hint_time = max(_hint_time - delta, 0.0)
 	_warning_t = maxf(_warning_t - delta, 0.0)
+	_flash_t = maxf(_flash_t - delta, 0.0)
 	if player and _auto_btn.button_pressed != player.auto_battle:
 		_auto_btn.set_pressed_no_signal(player.auto_battle)
 	_auto_btn.modulate = Color("#ffd84a") if player and player.auto_battle else Color.WHITE
@@ -103,7 +116,9 @@ func _draw() -> void:
 	if player.auto_battle:
 		var auto_label := "AUTO BATTLE" if player.advancing_to == "" else "AUTO: heading to %s" % player.advancing_to
 		var aw := _font.get_string_size(auto_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-		_text(Vector2((vs.x - aw) / 2.0, 16), auto_label, Color("#ffd84a"), 11)
+		# With a boss bar up top, the auto label moves below it.
+		var boss_up: bool = world != null and world.boss != null and is_instance_valid(world.boss) and world.boss.alive
+		_text(Vector2((vs.x - aw) / 2.0, 62 if boss_up else 16), auto_label, Color("#ffd84a"), 11 if not boss_up else 9)
 	# Map name and level range, top left
 	var map_name: String = world.map.get("name", "") if world else ""
 	var x := 8 + _font.get_string_size(map_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 8
@@ -114,12 +129,15 @@ func _draw() -> void:
 	_text(Vector2(x, 16), "Kills %d" % player.kills, Color("#cfd8e3"), 9)
 	_draw_portal_hint(vs)
 	_draw_warning(vs)
+	_draw_boss_bar(vs)
 	var party_bottom := _draw_party(vs)
 	# Controls panel: stays on screen, F1 hides or shows it.
 	if show_help:
 		_draw_help()
 	if Log.debug:
 		_draw_debug(vs, party_bottom)
+	if _flash_t > 0.0:
+		draw_rect(Rect2(Vector2.ZERO, vs), Color(_flash_col, 0.7 * _flash_t / _flash_len))
 
 ## Standing on a portal: say where it goes, just above the bottom bar.
 func _draw_portal_hint(vs: Vector2) -> void:
@@ -139,6 +157,30 @@ func _draw_portal_hint(vs: Vector2) -> void:
 			msg += "  Stronger than you"
 	var w := _font.get_string_size(msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
 	_text(Vector2((vs.x - w) / 2.0, vs.y - 30), msg, Color("#bfe6ff") if d == "" else World.danger_color(d), 10)
+
+## Boss HP bar across the top with the enrage countdown (red and pulsing when close, then ENRAGED).
+func _draw_boss_bar(vs: Vector2) -> void:
+	if world == null or world.boss == null or not is_instance_valid(world.boss) or not world.boss.alive:
+		return
+	var b: Mob = world.boss
+	var w := minf(320.0, vs.x - 260.0)
+	var r := Rect2((vs.x - w) / 2.0, 26, w, 9)
+	var name := "Lv.%d %s" % [b.level, b.data.name]
+	var nw := _font.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+	_text(Vector2((vs.x - nw) / 2.0, 23), name, Color("#ff9a7a") if not b.enraged else Color("#ff4a3a"), 10)
+	draw_rect(r.grow(1), Color(0, 0, 0, 0.7))
+	draw_rect(Rect2(r.position, Vector2(r.size.x * clampf(float(b.hp) / b.max_hp, 0.0, 1.0), r.size.y)), Color("#c0392b") if not b.enraged else Color("#ff2a1a"))
+	draw_rect(r, Color(1, 1, 1, 0.4), false, 1.0)
+	var hp_label := "%d / %d" % [maxi(b.hp, 0), b.max_hp]
+	var hw := _font.get_string_size(hp_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 7).x
+	_text(Vector2((vs.x - hw) / 2.0, r.position.y + 8), hp_label, Color.WHITE, 7)
+	var left := b.enrage_left()
+	var t := "ENRAGED!" if b.enraged else "Enrage in %d:%02d" % [int(left) / 60, int(left) % 60]
+	var urgent: bool = b.enraged or left < 15.0
+	var col := Color("#ffd84a") if not urgent else Color(1.0, 0.3, 0.25, 0.6 + 0.4 * sin(Time.get_ticks_msec() / 120.0))
+	# Under the bar, centered (the party frames own the top right).
+	var tw := _font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
+	_text(Vector2((vs.x - tw) / 2.0, r.end.y + 11), t, col, 9)
 
 ## Banner under the top edge after entering a map that's above the player's level.
 func _draw_warning(vs: Vector2) -> void:
@@ -216,6 +258,46 @@ func _draw_skill_bar(vs: Vector2) -> void:
 			draw_rect(Rect2(r.position, Vector2(size, size * frac)), Color(0, 0, 0, 0.6))
 		draw_rect(r, Color(1, 1, 1, 0.4), false, 1.0)
 		_text(r.position + Vector2(2, 9), SLOT_KEYS[n] if n < SLOT_KEYS.size() else "", Color.WHITE, 8)
+		_draw_cd_text(r, cd)
+	_draw_ult_slot(Vector2(x0, y))
+
+## Seconds left on a cooldown, centered low in the slot: "12", then "0.8" under a second.
+static func cd_label(cd: float) -> String:
+	if cd <= 0.0:
+		return ""
+	return "%.1f" % cd if cd < 1.0 else str(int(ceil(cd)))
+
+func _draw_cd_text(r: Rect2, cd: float) -> void:
+	var s := cd_label(cd)
+	if s == "":
+		return
+	var w := _font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x
+	_text(Vector2(r.get_center().x - w / 2.0, r.end.y - 2), s, Color("#ffe9a8"), 8)
+
+## Ultimate slot (G / Shift): bigger, glowing when ready, left of the potion slots.
+func ult_slot_rect(vs: Vector2) -> Rect2:
+	var size := 22.0
+	var x0 := vs.x - 6.0 - (player.spells.size() * 22.0 - 4.0) - 2 * 22.0 - 6.0 - size - 6.0
+	return Rect2(x0, vs.y - 22.0 - size - 2.0, size, size)
+
+func _draw_ult_slot(_skills_pos: Vector2) -> void:
+	if player.ult.is_empty():
+		return
+	var vs := get_viewport_rect().size
+	var r := ult_slot_rect(vs)
+	var col := Color(player.ult.color)
+	var ready: bool = player.ult_cd <= 0.0
+	if ready:
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() / 200.0)
+		draw_rect(r.grow(2), Color(col, 0.35 + 0.35 * pulse))
+	draw_rect(r, Color(0, 0, 0, 0.7))
+	draw_rect(r.grow(-3), col if player.mp >= float(player.ult.get("mp", 0)) else col.darkened(0.6))
+	draw_colored_polygon(PackedVector2Array([r.get_center() + Vector2(0, -6), r.get_center() + Vector2(5, 0), r.get_center() + Vector2(0, 6), r.get_center() + Vector2(-5, 0)]), Color(1, 1, 1, 0.85))
+	if not ready:
+		draw_rect(Rect2(r.position, Vector2(r.size.x, r.size.y * player.ult_cd / float(player.ult.cooldown))), Color(0, 0, 0, 0.65))
+	draw_rect(r, Color(1, 1, 1, 0.5), false, 1.0)
+	_text(r.position + Vector2(2, 9), "G", Color.WHITE, 8)
+	_draw_cd_text(r, player.ult_cd)
 
 ## HP and MP potion quick slots (R / F), left of the skill bar: best potion's icon and total count.
 func _draw_quick_slots(vs: Vector2) -> void:
