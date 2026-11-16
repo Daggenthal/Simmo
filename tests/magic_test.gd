@@ -200,6 +200,7 @@ func _physics_process(_d: float) -> bool:
 				p.position = Vector2(120, 330)
 				p.mp = p.max_mp
 				Comb.combo_counts.clear()
+				p.cast_log.clear()
 				_casts0 = p.casts
 				_kills0 = p.kills
 				p.set_auto_battle(true)
@@ -207,9 +208,10 @@ func _physics_process(_d: float) -> bool:
 				var combos := 0
 				for k in Comb.combo_counts:
 					combos += Comb.combo_counts[k]
-				_check(p.casts - _casts0 >= 10, "auto-battle casts spells (%d casts in 60s)" % (p.casts - _casts0))
+				_check(p.casts - _casts0 >= 10 and p.casts - _casts0 <= 45, "auto-battle casts spells at a sane pace (%d casts in 60s)" % (p.casts - _casts0))
 				_check(p.kills - _kills0 >= 10, "auto-battle still kills steadily with spells (%d kills in 60s)" % (p.kills - _kills0))
 				_check(combos >= 1, "auto-battle sets up combos on its own (%s)" % str(Comb.combo_counts))
+				_check_pacing(p)
 				p.set_auto_battle(false)
 				_goto("done")
 		"done":
@@ -316,3 +318,31 @@ func _instant_checks(p, e: Dictionary) -> void:
 	for node in _main.world.get_children():
 		if node.get_script() == ProjS:
 			node.queue_free()
+
+## No two spells within the global cooldown, and no spell again before its own cooldown.
+func _check_pacing(p) -> void:
+	var gcd_frames := int(round(float(p.cfg.global_cast_cooldown) * 60.0))
+	var min_gap := 99999
+	var last_by_id := {}
+	var early := []
+	for k in p.cast_log.size():
+		var f: int = p.cast_log[k][0]
+		var id: String = p.cast_log[k][1]
+		if k > 0:
+			min_gap = mini(min_gap, f - int(p.cast_log[k - 1][0]))
+		if last_by_id.has(id):
+			var need := int(round(float(p.spells[id].cooldown) * 60.0))
+			if f - int(last_by_id[id]) < need - 1:
+				early.append("%s after %d frames" % [id, f - int(last_by_id[id])])
+		last_by_id[id] = f
+	_check(min_gap >= gcd_frames - 1, "at least %.1fs between any two spells (closest pair %.2fs)" % [p.cfg.global_cast_cooldown, min_gap / 60.0])
+	_check(early.is_empty(), "no spell recast before its own cooldown %s" % (str(early) if not early.is_empty() else ""))
+	# Casting must lock out the weapon: no swing in the same frame as a cast.
+	var b0: int = p.swings
+	p._attack_cd = 0.0
+	p._cast_cd = 0.0
+	for k in p.spell_cd:
+		p.spell_cd[k] = 0.0
+	p.mp = p.max_mp
+	p._apply({"dir": 0.0, "jump": false, "jump_release": false, "down": false, "attack": true, "spell": "fireball"}, 1.0 / 60.0)
+	_check(p.swings == b0, "casting blocks a weapon swing in the same moment")

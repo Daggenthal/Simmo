@@ -42,6 +42,7 @@ var _cast_cd := 0.0
 var imbue_element := ""
 var casts := 0
 var last_chain: Array = []
+var cast_log: Array = []  # [physics frame, spell id] for tests and pacing checks
 var _auto_retarget := 0.0
 var _auto_target: Mob = null
 var _auto_was_manual := false
@@ -177,10 +178,11 @@ func _apply(i: Dictionary, delta: float) -> void:
 	if i.jump_release and velocity.y < 0.0:
 		velocity.y *= 0.5
 
-	if i.attack and _attack_cd <= 0.0:
-		attack()
+	# Spells first: a cast locks out the weapon for the global cooldown, so they can't fire together.
 	if i.get("spell", "") != "":
 		cast(i.spell)
+	if i.attack and _attack_cd <= 0.0:
+		attack()
 
 func set_auto_battle(on: bool) -> void:
 	auto_battle = on
@@ -287,9 +289,14 @@ func cast(id: String) -> bool:
 	var sp: Dictionary = spells[id]
 	mp -= float(sp.mp)
 	spell_cd[id] = float(sp.cooldown)
-	_cast_cd = float(cfg.get("global_cast_cooldown", 0.35))
+	var gcd := float(cfg.get("global_cast_cooldown", 1.0))
+	_cast_cd = gcd
+	_attack_cd = maxf(_attack_cd, gcd)
 	imbue_element = String(sp.element)
 	casts += 1
+	cast_log.append([Engine.get_physics_frames(), id])
+	if cast_log.size() > 200:
+		cast_log.pop_front()
 	_swing_time = 0.18
 	_swing_len = 0.18
 	var target := _aim_target(float(sp.range))
@@ -432,6 +439,7 @@ func _drop_through() -> void:
 ## The hit lands after the weapon's wind-up; the next swing waits for the cooldown.
 func attack() -> void:
 	var scale := float(cfg.get("attack_speed_scale", 1.0))
+	_cast_cd = maxf(_cast_cd, float(cfg.get("attack_blocks_cast", 0.3)))
 	_attack_cd = float(weapon.cooldown) * scale
 	_swing_len = maxf(float(weapon.windup) * scale + 0.16, 0.2)
 	_swing_time = _swing_len

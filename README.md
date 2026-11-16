@@ -24,6 +24,7 @@ Needs Godot 4.7 or newer: `brew install --cask godot`
 | Switch weapon | 1 / 2 / 3 / 4, or E to cycle | RB / R1 |
 | Fireball / Frost Bolt / Venom Glob / Chain Lightning | Z / X / C / V | B / LB / L3 / R3 |
 | Auto-battle on/off | Q or Tab (or the AUTO button) | Y / Triangle |
+| Show / hide controls | F1 | Start / Options |
 | Debug overlay | F3 | Back / Share |
 | Respawn all mobs | F5 | |
 

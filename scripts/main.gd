@@ -93,6 +93,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("debug_toggle"):
 		Log.debug = not Log.debug
 		Log.info("Debug mode %s" % ("on" if Log.debug else "off"))
+	elif event.is_action_pressed("help_toggle"):
+		hud.show_help = not hud.show_help
 	elif event.is_action_pressed("auto_battle"):
 		player.set_auto_battle(not player.auto_battle)
 	elif event.is_action_pressed("weapon_1"):

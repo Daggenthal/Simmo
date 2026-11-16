@@ -6,6 +6,13 @@ var player: Player
 var world: World
 var map_name := "Mossy Meadow"
 var _hint_time := 8.0
+var show_help := true
+const HELP_LINES := [
+	"Move: Arrows / WASD    Jump: Alt / Space    Attack: Ctrl / J",
+	"Drop down: Down + Jump    Auto-battle: Q / Tab    Weapons: 1-4 or E",
+	"Spells: Z Fire   X Frost   C Venom   V Lightning",
+	"Respawn mobs: F5    Debug: F3    Hide this: F1",
+]
 var _font: Font
 var _auto_btn: Button
 
@@ -73,11 +80,9 @@ func _draw() -> void:
 	# Map name, top left
 	_text(Vector2(8, 16), map_name, Color("#e8f3ff"), 11)
 	_text(Vector2(8 + _font.get_string_size(map_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 10, 16), "Kills %d" % player.kills, Color("#cfd8e3"), 9)
-	# Controls hint fades out
-	if _hint_time > 0.0:
-		var a := clampf(_hint_time / 2.0, 0.0, 1.0)
-		_text(Vector2(8, 32), "Move: Arrows / WASD   Jump: Alt / Space   Attack: Ctrl / J", Color(1, 1, 1, a), 9)
-		_text(Vector2(8, 44), "Down + Jump: drop   Auto: Q / Tab   Weapons: 1-4 / E   Spells: Z X C V   Debug: F3", Color(1, 1, 1, a), 9)
+	# Controls panel: stays on screen, F1 hides or shows it.
+	if show_help:
+		_draw_help()
 	if Log.debug:
 		_draw_debug(vs)
 
@@ -124,3 +129,14 @@ func _draw_skill_bar(vs: Vector2) -> void:
 			draw_rect(Rect2(r.position, Vector2(size, size * frac)), Color(0, 0, 0, 0.6))
 		draw_rect(r, Color(1, 1, 1, 0.4), false, 1.0)
 		_text(r.position + Vector2(2, 9), String(sp.key), Color.WHITE, 8)
+
+func _draw_help() -> void:
+	var w := 0.0
+	for line in HELP_LINES:
+		w = maxf(w, _font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x)
+	var r := Rect2(6, 22, w + 10, HELP_LINES.size() * 11 + 6)
+	draw_rect(r, Color(0.05, 0.06, 0.1, 0.45))
+	var y := r.position.y + 11
+	for line in HELP_LINES:
+		_text(Vector2(r.position.x + 5, y), line, Color(1, 1, 1, 0.9), 8)
+		y += 11.0

@@ -19,6 +19,7 @@ const BINDINGS := {
 	"spell_2": [KEY_X],
 	"spell_3": [KEY_C],
 	"spell_4": [KEY_V],
+	"help_toggle": [KEY_F1],
 	"debug_toggle": [KEY_F3],
 	"respawn_mobs": [KEY_F5],
 }
@@ -37,6 +38,7 @@ const PAD_BUTTONS := {
 	"spell_3": [JOY_BUTTON_LEFT_STICK],
 	"spell_4": [JOY_BUTTON_RIGHT_STICK],
 	"debug_toggle": [JOY_BUTTON_BACK],
+	"help_toggle": [JOY_BUTTON_START],
 }
 
 func _ready() -> void:
