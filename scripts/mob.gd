@@ -1,9 +1,10 @@
 class_name Mob
 extends CharacterBody2D
 ## Placeholder mob. Wanders on its platform, turns aggressive when hit,
-## damages the player on touch, drops XP on death and respawns later.
+## damages players and SimPlayers on touch, respawns later (World hands out the XP).
+## Some types are aggressive (aggro_range) and some resist elements (resist).
 
-signal killed(mob: Mob)
+signal killed(mob: Mob, attacker: Node2D)
 
 var id := ""
 var data: Dictionary
@@ -40,10 +41,15 @@ var poison_t := 0.0
 var _dot_acc := 0.0
 var _last_attacker: Node2D = null
 var dot_damage_taken := 0
+var level := 1
+var shape_kind := "slime"
+var _font: Font
 
 func setup(mob_id: String, mob_data: Dictionary, spawn: Vector2, gravity: float) -> void:
 	id = mob_id
 	data = mob_data
+	level = int(data.get("level", 1))
+	shape_kind = String(data.get("shape", "slime"))
 	max_hp = int(data.hp)
 	hp = max_hp
 	size = Vector2(data.size[0], data.size[1])
@@ -64,8 +70,9 @@ func set_bounds(nav: Nav) -> void:
 
 func _ready() -> void:
 	add_to_group("mobs")
+	_font = ThemeDB.fallback_font
 	collision_layer = 0
-	collision_mask = Player.LAYER_GROUND | Player.LAYER_PLATFORMS
+	collision_mask = Actor.LAYER_GROUND | Actor.LAYER_PLATFORMS
 	var shape := RectangleShape2D.new()
 	shape.size = size
 	var col := CollisionShape2D.new()
@@ -74,6 +81,10 @@ func _ready() -> void:
 	add_child(col)
 	_dir = 1 if randf() < 0.5 else -1
 	_think = randf_range(0.5, 2.0)
+
+## Share of `element` damage this mob shrugs off (0 = none, 1 = immune).
+func resist(element: String) -> float:
+	return clampf(float(data.get("resist", {}).get(element, 0.0)), 0.0, 1.0)
 
 func is_frozen() -> bool:
 	return frozen_t > 0.0
@@ -174,6 +185,7 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		queue_redraw()
 		return
+	_update_aggro()
 	if is_instance_valid(_aggro):
 		_dir = 1 if _aggro.global_position.x > global_position.x else -1
 		speed *= 1.4
@@ -206,11 +218,26 @@ func _physics_process(delta: float) -> void:
 	_touch_player()
 	queue_redraw()
 
-func _touch_player() -> void:
-	if frozen_t > 0.0:
+## Aggressive mobs pick up anyone close on their level; everyone drops a target that left or went down.
+func _update_aggro() -> void:
+	var r := float(data.get("aggro_range", 0.0))
+	if is_instance_valid(_aggro):
+		if not _aggro.is_inside_tree() or not _aggro.visible or (r > 0.0 and _aggro.global_position.distance_to(global_position) > r * 3.0):
+			_aggro = null
+	if _aggro != null or r <= 0.0:
 		return
-	for p in get_tree().get_nodes_in_group("player"):
-		var pr := Rect2(p.global_position + Vector2(-Player.W / 2.0, -Player.H), Vector2(Player.W, Player.H))
+	var best := r
+	for a in get_tree().get_nodes_in_group("actors"):
+		var d: float = absf(a.global_position.x - global_position.x)
+		if a.visible and d <= best and absf(a.global_position.y - global_position.y) < 30.0:
+			best = d
+			_aggro = a
+
+func _touch_player() -> void:
+	if frozen_t > 0.0 or int(data.touch_damage) <= 0:
+		return
+	for p in get_tree().get_nodes_in_group("actors"):
+		var pr := Rect2(p.global_position + Vector2(-Actor.W / 2.0, -Actor.H), Vector2(Actor.W, Actor.H))
 		if pr.intersects(hurt_rect().grow(-1)):
 			p.take_damage(int(data.touch_damage), global_position.x)
 
@@ -222,6 +249,7 @@ func take_hit(amount: int, crit: bool, from_dir: int, attacker: Node2D, knockbac
 	_hp_bar_time = 3.0
 	_aggro = attacker
 	_last_attacker = attacker
+	knockback *= float(data.get("knockback_mult", 1.0))  # heavy mobs barely budge
 	if knockback > 0.0:
 		velocity = Vector2(from_dir * knockback, -60.0 - knockback * 0.4)
 	var col := Color("#ffb347") if crit and element == "physical" else Combat.element_color(element)
@@ -238,11 +266,7 @@ func _die(attacker: Node2D) -> void:
 	clear_statuses()
 	set_physics_process(false)
 	collision_mask = 0
-	if attacker and attacker.has_method("gain_xp"):
-		FloatText.spawn(get_parent(), global_position + Vector2(0, -size.y - 16), "+%d XP" % int(data.xp), Color("#9be37d"))
-		attacker.gain_xp(int(data.xp))
-		attacker.kills += 1
-	killed.emit(self)
+	killed.emit(self, attacker)
 
 func respawn() -> void:
 	alive = true
@@ -253,7 +277,7 @@ func respawn() -> void:
 	_aggro = null
 	position = home
 	velocity = Vector2.ZERO
-	collision_mask = Player.LAYER_GROUND | Player.LAYER_PLATFORMS
+	collision_mask = Actor.LAYER_GROUND | Actor.LAYER_PLATFORMS
 	set_physics_process(true)
 
 func _draw() -> void:
@@ -265,26 +289,97 @@ func _draw() -> void:
 		c = c.lerp(Color("#9fe0ff"), 0.45)
 	if burn_t > 0.0 and _flash <= 0.0:
 		c = c.lerp(Color("#ff8a3d"), 0.3)
-	if id == "stump":
-		draw_rect(body, c)
-		draw_rect(Rect2(body.position + Vector2(0, 0), Vector2(body.size.x, 4)), c.darkened(0.3))
-		draw_rect(Rect2(Vector2(-6, -s.y + 7), Vector2(3, 2)), Color("#2b1a0e"))
-		draw_rect(Rect2(Vector2(3, -s.y + 7), Vector2(3, 2)), Color("#2b1a0e"))
-		draw_line(Vector2(-5, -s.y + 6), Vector2(-2, -s.y + 7), Color("#2b1a0e"), 1.0)
-		draw_line(Vector2(5, -s.y + 6), Vector2(2, -s.y + 7), Color("#2b1a0e"), 1.0)
-	else:
-		draw_rect(Rect2(body.position + Vector2(1, 2), body.size - Vector2(2, 2)), c)
-		draw_rect(Rect2(body.position + Vector2(3, 0), Vector2(body.size.x - 6, 3)), c)
-		draw_rect(Rect2(body.position + Vector2(3, 3), Vector2(3, 2)), c.lightened(0.5))
-		var ex := 2.0 * (_dir if _dir != 0 else 1)
-		draw_rect(Rect2(Vector2(-4 + ex, body.position.y + 4), Vector2(2, 3)), Color("#1c1c1c"))
-		draw_rect(Rect2(Vector2(2 + ex, body.position.y + 4), Vector2(2, 3)), Color("#1c1c1c"))
+	_draw_body(body, c, s)
 	_draw_statuses(body)
 	if _hp_bar_time > 0.0:
 		var w := maxf(s.x, 20.0)
 		var y := -s.y - 5
 		draw_rect(Rect2(-w / 2.0, y, w, 3), Color(0, 0, 0, 0.7))
 		draw_rect(Rect2(-w / 2.0, y, w * clampf(float(hp) / max_hp, 0.0, 1.0), 3), Color("#e04848"))
+	_draw_label()
+
+## "Lv.N" under the feet, colored by how dangerous the mob is for the player; the name shows while hurt.
+func _draw_label() -> void:
+	if _font == null:
+		return
+	var pl_level := level
+	var pl := get_tree().get_first_node_in_group("player") if is_inside_tree() else null
+	if pl:
+		pl_level = pl.level
+	var label := "Lv.%d" % level
+	if _hp_bar_time > 0.0:
+		label = "Lv.%d %s" % [level, data.get("name", id)]
+	var w := _font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 7).x
+	var pos := Vector2(-w / 2.0, 9)
+	draw_string_outline(_font, pos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 7, 3, Color(0, 0, 0, 0.75))
+	draw_string(_font, pos, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 7, Scaling.level_color(level, pl_level))
+
+func _draw_eyes(y: float, col := Color("#1c1c1c")) -> void:
+	var ex := 2.0 * (_dir if _dir != 0 else 1)
+	draw_rect(Rect2(Vector2(-4 + ex, y), Vector2(2, 3)), col)
+	draw_rect(Rect2(Vector2(2 + ex, y), Vector2(2, 3)), col)
+
+func _draw_body(body: Rect2, c: Color, s: Vector2) -> void:
+	var f := float(_dir if _dir != 0 else 1)
+	match shape_kind:
+		"stump":
+			draw_rect(body, c)
+			draw_rect(Rect2(body.position, Vector2(body.size.x, 4)), c.darkened(0.3))
+			draw_rect(Rect2(Vector2(-6, -s.y + 7), Vector2(3, 2)), Color("#2b1a0e"))
+			draw_rect(Rect2(Vector2(3, -s.y + 7), Vector2(3, 2)), Color("#2b1a0e"))
+			draw_line(Vector2(-5, -s.y + 6), Vector2(-2, -s.y + 7), Color("#2b1a0e"), 1.0)
+			draw_line(Vector2(5, -s.y + 6), Vector2(2, -s.y + 7), Color("#2b1a0e"), 1.0)
+		"mushroom":
+			var stem := Rect2(Vector2(-body.size.x * 0.3, body.position.y + body.size.y * 0.45), Vector2(body.size.x * 0.6, body.size.y * 0.55))
+			draw_rect(stem, Color("#f2e6c8"))
+			draw_rect(Rect2(body.position, Vector2(body.size.x, body.size.y * 0.5)), c)
+			draw_rect(Rect2(body.position + Vector2(2, -2), Vector2(body.size.x - 4, 2)), c)
+			draw_circle(body.position + Vector2(4, 3), 1.5, Color(1, 1, 1, 0.8))
+			draw_circle(body.position + Vector2(body.size.x - 5, 4), 1.5, Color(1, 1, 1, 0.8))
+			_draw_eyes(stem.position.y + 2)
+			if id == "horny_shroom":
+				draw_line(body.position + Vector2(3, 0), body.position + Vector2(1, -5), Color("#f2e6c8"), 2.0)
+				draw_line(body.position + Vector2(body.size.x - 3, 0), body.position + Vector2(body.size.x - 1, -5), Color("#f2e6c8"), 2.0)
+		"boar":
+			draw_rect(Rect2(body.position + Vector2(0, 2), body.size - Vector2(0, 6)), c)
+			draw_rect(Rect2(body.position + Vector2(2, 0), Vector2(body.size.x - 8, 3)), c.darkened(0.25))
+			for lx in [-9.0, -4.0, 3.0, 8.0]:
+				draw_rect(Rect2(Vector2(lx, -4), Vector2(2, 4)), c.darkened(0.35))
+			var snout := Vector2(f * (body.size.x / 2.0), body.position.y + body.size.y * 0.45)
+			draw_rect(Rect2(snout + Vector2(-2 if f > 0 else -2, -2), Vector2(4, 4)), c.lightened(0.2))
+			draw_line(snout + Vector2(0, 2), snout + Vector2(f * 4, -2), Color("#f5f0e0"), 1.5)
+			draw_rect(Rect2(snout + Vector2(-f * 6 - 1, -4), Vector2(2, 2)), Color("#1c1c1c"))
+		"imp":
+			draw_rect(Rect2(body.position + Vector2(2, 4), body.size - Vector2(4, 6)), c)
+			draw_circle(Vector2(0, body.position.y + 5), body.size.x / 2.5, c)
+			draw_line(Vector2(-4, body.position.y + 2), Vector2(-6, body.position.y - 4), Color("#3a1a10"), 2.0)
+			draw_line(Vector2(4, body.position.y + 2), Vector2(6, body.position.y - 4), Color("#3a1a10"), 2.0)
+			_draw_eyes(body.position.y + 4, Color("#ffe66b"))
+			var t := Time.get_ticks_msec() / 1000.0
+			draw_rect(Rect2(Vector2(-1, body.position.y - 6 - fmod(t * 8.0, 3.0)), Vector2(2, 3)), Color(1.0, 0.7, 0.2, 0.8))
+		"golem":
+			draw_rect(Rect2(body.position + Vector2(3, 0), Vector2(body.size.x - 6, body.size.y * 0.4)), c)
+			draw_rect(Rect2(body.position + Vector2(0, body.size.y * 0.35), Vector2(body.size.x, body.size.y * 0.45)), c.darkened(0.12))
+			draw_rect(Rect2(Vector2(-body.size.x / 2.0 + 2, -body.size.y * 0.2), Vector2(5, body.size.y * 0.2)), c.darkened(0.3))
+			draw_rect(Rect2(Vector2(body.size.x / 2.0 - 7, -body.size.y * 0.2), Vector2(5, body.size.y * 0.2)), c.darkened(0.3))
+			draw_rect(Rect2(body.position + Vector2(body.size.x / 2.0 - 5 + f * 2, 5), Vector2(10, 2)), Color("#ffd36b") if id == "rock_golem" else Color("#e8f8ff"))
+			draw_line(body.position + Vector2(5, body.size.y * 0.5), body.position + Vector2(9, body.size.y * 0.65), c.darkened(0.4), 1.0)
+		"skeleton":
+			var bone := c
+			draw_circle(Vector2(0, body.position.y + 4), 4.5, bone)
+			draw_rect(Rect2(Vector2(-2 + f, body.position.y + 3), Vector2(2, 2)), Color("#1c1c1c"))
+			draw_rect(Rect2(Vector2(1 + f, body.position.y + 3), Vector2(2, 2)), Color("#1c1c1c"))
+			draw_rect(Rect2(Vector2(-1, body.position.y + 8), Vector2(2, body.size.y - 14)), bone)
+			for k in 3:
+				draw_rect(Rect2(Vector2(-4, body.position.y + 10 + k * 3), Vector2(8, 1)), bone)
+			draw_line(Vector2(-1, -6), Vector2(-4, 0), bone, 1.5)
+			draw_line(Vector2(1, -6), Vector2(4, 0), bone, 1.5)
+			draw_line(Vector2(f * 3, body.position.y + 11), Vector2(f * 9, body.position.y + 6), Color("#9aa3ad"), 1.5)
+		_:
+			draw_rect(Rect2(body.position + Vector2(1, 2), body.size - Vector2(2, 2)), c)
+			draw_rect(Rect2(body.position + Vector2(3, 0), Vector2(body.size.x - 6, 3)), c)
+			draw_rect(Rect2(body.position + Vector2(3, 3), Vector2(3, 2)), c.lightened(0.5))
+			_draw_eyes(body.position.y + 4)
 
 func _draw_statuses(body: Rect2) -> void:
 	var t := Time.get_ticks_msec() / 1000.0

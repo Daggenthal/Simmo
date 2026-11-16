@@ -1,0 +1,686 @@
+{
+  "_doc": "Maps: platforms are [x, y, width] (one-way, jump up through). spawns are [mob id, x, surface y]. portals sit on the ground unless they give y; stand on one and press Up. Every platform must be reachable by a real jump (tests check this).",
+  "start": "mossy_meadow",
+  "maps": {
+    "mossy_meadow": {
+      "name": "Mossy Meadow",
+      "levels": [
+        1,
+        5
+      ],
+      "width": 1800,
+      "ground_y": 330,
+      "spawn": [
+        120,
+        330
+      ],
+      "town": true,
+      "theme": {
+        "sky": "#8fd0f5",
+        "hills": [
+          "#b9e3c6",
+          "#8fcf86"
+        ],
+        "grass": "#5fb548",
+        "dirt": "#7a5232",
+        "speck": "#5e3d24",
+        "plat_top": "#6cc552",
+        "plat": "#8b6238",
+        "decor": "town"
+      },
+      "platforms": [
+        [
+          300,
+          270,
+          140
+        ],
+        [
+          470,
+          225,
+          160
+        ],
+        [
+          760,
+          270,
+          120
+        ],
+        [
+          930,
+          208,
+          200
+        ],
+        [
+          1180,
+          268,
+          150
+        ],
+        [
+          1380,
+          205,
+          180
+        ],
+        [
+          1600,
+          268,
+          140
+        ]
+      ],
+      "spawns": [
+        [
+          "green_slime",
+          420,
+          330
+        ],
+        [
+          "green_slime",
+          600,
+          330
+        ],
+        [
+          "green_slime",
+          360,
+          270
+        ],
+        [
+          "green_slime",
+          560,
+          225
+        ],
+        [
+          "blue_slime",
+          840,
+          330
+        ],
+        [
+          "blue_slime",
+          1010,
+          208
+        ],
+        [
+          "blue_slime",
+          1100,
+          330
+        ],
+        [
+          "green_slime",
+          1240,
+          268
+        ],
+        [
+          "stump",
+          1320,
+          330
+        ],
+        [
+          "blue_slime",
+          1460,
+          205
+        ],
+        [
+          "stump",
+          1560,
+          330
+        ],
+        [
+          "blue_slime",
+          1650,
+          268
+        ]
+      ],
+      "portals": [
+        {
+          "name": "east",
+          "x": 1760,
+          "to": "mushroom_grove",
+          "to_portal": "west"
+        }
+      ]
+    },
+    "mushroom_grove": {
+      "name": "Mushroom Grove",
+      "levels": [
+        6,
+        12
+      ],
+      "width": 2000,
+      "ground_y": 330,
+      "spawn": [
+        90,
+        330
+      ],
+      "theme": {
+        "sky": "#a9c9e8",
+        "hills": [
+          "#a8cdb0",
+          "#6fae78"
+        ],
+        "grass": "#4f9a45",
+        "dirt": "#5e4430",
+        "speck": "#45301f",
+        "plat_top": "#58a84a",
+        "plat": "#6e4c2e",
+        "decor": "shrooms"
+      },
+      "platforms": [
+        [
+          180,
+          270,
+          160
+        ],
+        [
+          290,
+          212,
+          140
+        ],
+        [
+          600,
+          270,
+          170
+        ],
+        [
+          680,
+          210,
+          150
+        ],
+        [
+          740,
+          150,
+          110
+        ],
+        [
+          1000,
+          270,
+          150
+        ],
+        [
+          1180,
+          268,
+          140
+        ],
+        [
+          1250,
+          208,
+          150
+        ],
+        [
+          1500,
+          270,
+          170
+        ],
+        [
+          1580,
+          210,
+          140
+        ],
+        [
+          1780,
+          268,
+          120
+        ]
+      ],
+      "spawns": [
+        [
+          "orange_shroom",
+          380,
+          330
+        ],
+        [
+          "orange_shroom",
+          250,
+          270
+        ],
+        [
+          "orange_shroom",
+          360,
+          212
+        ],
+        [
+          "orange_shroom",
+          520,
+          330
+        ],
+        [
+          "horny_shroom",
+          650,
+          270
+        ],
+        [
+          "horny_shroom",
+          760,
+          210
+        ],
+        [
+          "horny_shroom",
+          790,
+          150
+        ],
+        [
+          "wild_boar",
+          920,
+          330
+        ],
+        [
+          "horny_shroom",
+          1060,
+          270
+        ],
+        [
+          "wild_boar",
+          1150,
+          330
+        ],
+        [
+          "horny_shroom",
+          1300,
+          208
+        ],
+        [
+          "wild_boar",
+          1420,
+          330
+        ],
+        [
+          "horny_shroom",
+          1560,
+          270
+        ],
+        [
+          "wild_boar",
+          1700,
+          330
+        ],
+        [
+          "horny_shroom",
+          1640,
+          210
+        ]
+      ],
+      "portals": [
+        {
+          "name": "west",
+          "x": 40,
+          "to": "mossy_meadow",
+          "to_portal": "east"
+        },
+        {
+          "name": "east",
+          "x": 1960,
+          "to": "ember_crags",
+          "to_portal": "west"
+        }
+      ]
+    },
+    "ember_crags": {
+      "name": "Ember Crags",
+      "levels": [
+        13,
+        20
+      ],
+      "width": 2000,
+      "ground_y": 330,
+      "spawn": [
+        90,
+        330
+      ],
+      "theme": {
+        "sky": "#e8a27a",
+        "hills": [
+          "#c98a6a",
+          "#9a5a44"
+        ],
+        "grass": "#b5562c",
+        "dirt": "#4a2a20",
+        "speck": "#ff7a2e",
+        "plat_top": "#c4683a",
+        "plat": "#5a3a2e",
+        "decor": "rocks"
+      },
+      "platforms": [
+        [
+          220,
+          268,
+          150
+        ],
+        [
+          300,
+          208,
+          130
+        ],
+        [
+          360,
+          148,
+          110
+        ],
+        [
+          620,
+          270,
+          160
+        ],
+        [
+          900,
+          270,
+          140
+        ],
+        [
+          960,
+          210,
+          160
+        ],
+        [
+          1220,
+          270,
+          150
+        ],
+        [
+          1300,
+          212,
+          120
+        ],
+        [
+          1520,
+          270,
+          160
+        ],
+        [
+          1600,
+          210,
+          150
+        ],
+        [
+          1640,
+          150,
+          100
+        ]
+      ],
+      "spawns": [
+        [
+          "fire_imp",
+          420,
+          330
+        ],
+        [
+          "fire_imp",
+          290,
+          268
+        ],
+        [
+          "lava_slime",
+          360,
+          208
+        ],
+        [
+          "fire_imp",
+          400,
+          148
+        ],
+        [
+          "lava_slime",
+          560,
+          330
+        ],
+        [
+          "lava_slime",
+          690,
+          270
+        ],
+        [
+          "rock_golem",
+          800,
+          330
+        ],
+        [
+          "fire_imp",
+          960,
+          270
+        ],
+        [
+          "lava_slime",
+          1040,
+          210
+        ],
+        [
+          "rock_golem",
+          1150,
+          330
+        ],
+        [
+          "fire_imp",
+          1280,
+          270
+        ],
+        [
+          "lava_slime",
+          1350,
+          212
+        ],
+        [
+          "rock_golem",
+          1450,
+          330
+        ],
+        [
+          "fire_imp",
+          1580,
+          270
+        ],
+        [
+          "lava_slime",
+          1680,
+          210
+        ],
+        [
+          "fire_imp",
+          1690,
+          150
+        ],
+        [
+          "rock_golem",
+          1800,
+          330
+        ]
+      ],
+      "portals": [
+        {
+          "name": "west",
+          "x": 40,
+          "to": "mushroom_grove",
+          "to_portal": "east"
+        },
+        {
+          "name": "east",
+          "x": 1960,
+          "to": "frostpeak_ruins",
+          "to_portal": "west"
+        }
+      ]
+    },
+    "frostpeak_ruins": {
+      "name": "Frostpeak Ruins",
+      "levels": [
+        21,
+        30
+      ],
+      "width": 2200,
+      "ground_y": 330,
+      "spawn": [
+        90,
+        330
+      ],
+      "theme": {
+        "sky": "#cfe3f2",
+        "hills": [
+          "#e6f0f8",
+          "#b8cfe0"
+        ],
+        "grass": "#f2f7fb",
+        "dirt": "#6a7a8a",
+        "speck": "#9fb4c8",
+        "plat_top": "#eef6fc",
+        "plat": "#7d8c9c",
+        "decor": "snow"
+      },
+      "platforms": [
+        [
+          200,
+          270,
+          150
+        ],
+        [
+          280,
+          210,
+          140
+        ],
+        [
+          560,
+          268,
+          170
+        ],
+        [
+          640,
+          208,
+          130
+        ],
+        [
+          880,
+          270,
+          150
+        ],
+        [
+          1100,
+          270,
+          150
+        ],
+        [
+          1170,
+          210,
+          140
+        ],
+        [
+          1220,
+          150,
+          120
+        ],
+        [
+          1450,
+          268,
+          160
+        ],
+        [
+          1700,
+          270,
+          150
+        ],
+        [
+          1760,
+          210,
+          150
+        ],
+        [
+          1960,
+          268,
+          140
+        ]
+      ],
+      "spawns": [
+        [
+          "frost_slime",
+          400,
+          330
+        ],
+        [
+          "frost_slime",
+          260,
+          270
+        ],
+        [
+          "skeleton",
+          340,
+          210
+        ],
+        [
+          "frost_slime",
+          620,
+          268
+        ],
+        [
+          "skeleton",
+          700,
+          208
+        ],
+        [
+          "ice_golem",
+          820,
+          330
+        ],
+        [
+          "frost_slime",
+          940,
+          270
+        ],
+        [
+          "skeleton",
+          1040,
+          330
+        ],
+        [
+          "frost_slime",
+          1160,
+          270
+        ],
+        [
+          "skeleton",
+          1230,
+          210
+        ],
+        [
+          "frost_slime",
+          1280,
+          150
+        ],
+        [
+          "ice_golem",
+          1380,
+          330
+        ],
+        [
+          "skeleton",
+          1520,
+          268
+        ],
+        [
+          "frost_slime",
+          1640,
+          330
+        ],
+        [
+          "skeleton",
+          1760,
+          270
+        ],
+        [
+          "frost_slime",
+          1830,
+          210
+        ],
+        [
+          "ice_golem",
+          1900,
+          330
+        ],
+        [
+          "skeleton",
+          2020,
+          268
+        ]
+      ],
+      "portals": [
+        {
+          "name": "west",
+          "x": 40,
+          "to": "ember_crags",
+          "to_portal": "east"
+        }
+      ]
+    }
+  }
+}

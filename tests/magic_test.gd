@@ -27,11 +27,14 @@ var _first_throw := -1
 
 func _initialize() -> void:
 	_log = root.get_node("Log")
-	seed(4242)
+	# SIMMO_SEED=n runs with another seed, to shake out flaky checks.
+	var env_seed := OS.get_environment("SIMMO_SEED")
+	seed(int(env_seed) if env_seed != "" else 4242)
 	Comb = load("res://scripts/combat.gd")
 	ProjS = load("res://scripts/projectile.gd")
 	WorldS = load("res://scripts/world.gd")
 	_main = load("res://main.tscn").instantiate()
+	_main.spawn_sims = false
 	root.add_child(_main)
 
 func _check(cond: bool, msg: String) -> void:
@@ -196,8 +199,8 @@ func _physics_process(_d: float) -> bool:
 				_main.world._respawn_queue.clear()
 				for k in _main.world.mobs.size():
 					var m = _main.world.mobs[k]
-					var sp: Array = WorldS.SPAWNS[k]
-					m.data = _main.balance.mobs[m.id].duplicate()
+					var sp: Array = _main.world.spawns[k]
+					m.data = _main.world.mob_data(m.id, m.level)
 					m.max_hp = int(m.data.hp)
 					m.home = Vector2(sp[1], sp[2] - 1)
 					m.set_bounds(_main.world.nav)
@@ -222,6 +225,8 @@ func _physics_process(_d: float) -> bool:
 			# Tough targets live long enough for combos: auto-battle should go for them.
 			if _pf == 1:
 				_park_all()
+				# Tough means tough for a level 1 player; earlier phases level the player up.
+				p.level = 1
 				_dummy(0, Vector2(560, 329), 600)
 				_dummy(1, Vector2(590, 329), 600)
 				p.position = Vector2(470, 330)

@@ -22,6 +22,7 @@ const BINDINGS := {
 	"help_toggle": [KEY_F1],
 	"debug_toggle": [KEY_F3],
 	"respawn_mobs": [KEY_F5],
+	"party_toggle": [KEY_P],
 }
 
 const PAD_BUTTONS := {

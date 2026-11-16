@@ -12,6 +12,7 @@ extends RefCounted
 ##   frost on a frozen mob      bonus crit chance
 ##   lightning on a frozen mob  always crits, splashes nearby mobs, shatters the ice
 ##   fire on a poisoned mob     ignite: the poison bursts for damage per stack around it
+## Resists (mob data "resist": {element: 0..1}) cut damage and the chance the effect applies.
 
 static var elements: Dictionary = {}
 static var combo_counts: Dictionary = {}  # combo name -> times triggered (for tests and stats)
@@ -51,11 +52,15 @@ static func hit(mob: Mob, attacker: Node2D, base: int, element: String, opts: Di
 	var amount := base
 	if crit:
 		amount = int(round(amount * float(opts.get("crit_mult", 2.0))))
+	# Resists cut the damage and the chance the element's effect sticks.
+	var res := mob.resist(element)
+	if res > 0.0:
+		amount = maxi(1, int(round(amount * (1.0 - res))))
 	var knock := 0.0 if mob.is_frozen() else float(opts.get("knockback", 0.0))
 	mob.take_hit(amount, crit, int(opts.get("dir", 1)), attacker, knock, element)
 
 	# Element effects (only if the mob survived the hit).
-	var proc := float(opts.get("proc", 1.0))
+	var proc := float(opts.get("proc", 1.0)) * (1.0 - res)
 	var strength := float(opts.get("strength", 1.0))
 	if mob.alive and randf() < proc:
 		match element:

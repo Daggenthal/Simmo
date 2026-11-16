@@ -3,7 +3,7 @@
 #   ./run.sh            play the game
 #   ./run.sh debug      play with debug mode on (full logging, hitboxes, F3 overlay)
 #   ./run.sh editor     open the project in the Godot editor
-#   ./run.sh test       run the headless smoke test
+#   ./run.sh test       run all headless test suites (SIMMO_SEED=n to vary the seed)
 # Env: GODOT=/path/to/godot to pick a binary, SIMMO_NO_COLOR=1 for plain output.
 
 set -uo pipefail
@@ -49,7 +49,7 @@ case "${1:-play}" in
 	editor) exec "$GODOT_BIN" --editor --path . ;;
 	test)
 		code=0
-		for t in smoke_test magic_test; do
+		for t in smoke_test magic_test world_test party_test; do
 			"$GODOT_BIN" --headless --fixed-fps 60 --path . --script "res://tests/$t.gd"
 			c=$?
 			if [[ $c -eq 0 ]]; then echo "${GREEN}$t passed${RESET}"; else echo "${RED}$t failed (exit $c)${RESET}"; code=1; fi

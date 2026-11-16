@@ -32,7 +32,21 @@
     "auto_use_spells": true,
     "attack_blocks_cast": 0.3,
     "cast_locks_weapon": 0.4,
-    "thrown_preferred_range": 0.6
+    "thrown_preferred_range": 0.6,
+    "spells": [
+      "fireball",
+      "frost_bolt",
+      "venom_glob",
+      "chain_lightning"
+    ],
+    "look": {
+      "skin": "#f2c27b",
+      "hair": "#4a3426",
+      "hair_style": "short",
+      "shirt": "#d9534f",
+      "pants": "#3b4a6b",
+      "hat": ""
+    }
   },
   "mobs": {
     "green_slime": {
@@ -47,35 +61,202 @@
       "size": [
         16,
         11
-      ]
+      ],
+      "shape": "slime"
     },
     "blue_slime": {
       "name": "Blue Slime",
       "level": 3,
       "hp": 55,
       "touch_damage": 9,
-      "xp": 10,
+      "xp": 26,
       "speed": 55,
       "hop_velocity": 200,
       "color": "#5aa8cf",
       "size": [
         18,
         13
-      ]
+      ],
+      "shape": "slime"
     },
     "stump": {
       "name": "Grumpy Stump",
       "level": 5,
       "hp": 120,
       "touch_damage": 14,
-      "xp": 26,
+      "xp": 84,
       "speed": 22,
       "hop_velocity": 0,
       "color": "#a0703c",
       "size": [
         20,
         20
+      ],
+      "shape": "stump",
+      "knockback_mult": 0.6
+    },
+    "orange_shroom": {
+      "name": "Orange Shroom",
+      "shape": "mushroom",
+      "level": 6,
+      "hp": 70,
+      "touch_damage": 14,
+      "xp": 56,
+      "speed": 45,
+      "hop_velocity": 180,
+      "color": "#f0903a",
+      "size": [
+        18,
+        18
       ]
+    },
+    "horny_shroom": {
+      "name": "Horny Shroom",
+      "shape": "mushroom",
+      "level": 9,
+      "hp": 95,
+      "touch_damage": 18,
+      "xp": 97,
+      "speed": 60,
+      "hop_velocity": 0,
+      "color": "#7a5bd6",
+      "size": [
+        18,
+        19
+      ],
+      "aggro_range": 90
+    },
+    "wild_boar": {
+      "name": "Wild Boar",
+      "shape": "boar",
+      "level": 11,
+      "hp": 150,
+      "touch_damage": 22,
+      "xp": 171,
+      "speed": 75,
+      "hop_velocity": 0,
+      "color": "#8a5a3a",
+      "size": [
+        26,
+        16
+      ],
+      "aggro_range": 120,
+      "knockback_mult": 0.6
+    },
+    "fire_imp": {
+      "name": "Fire Imp",
+      "shape": "imp",
+      "level": 13,
+      "hp": 90,
+      "touch_damage": 20,
+      "xp": 112,
+      "speed": 70,
+      "hop_velocity": 200,
+      "color": "#e0482e",
+      "size": [
+        14,
+        18
+      ],
+      "resist": {
+        "fire": 0.75
+      },
+      "aggro_range": 100
+    },
+    "lava_slime": {
+      "name": "Lava Slime",
+      "shape": "slime",
+      "level": 15,
+      "hp": 120,
+      "touch_damage": 24,
+      "xp": 160,
+      "speed": 50,
+      "hop_velocity": 190,
+      "color": "#ff6a1f",
+      "size": [
+        20,
+        14
+      ],
+      "resist": {
+        "fire": 0.5
+      }
+    },
+    "rock_golem": {
+      "name": "Rock Golem",
+      "shape": "golem",
+      "level": 18,
+      "hp": 260,
+      "touch_damage": 30,
+      "xp": 378,
+      "speed": 25,
+      "hop_velocity": 0,
+      "color": "#8d7f72",
+      "size": [
+        24,
+        26
+      ],
+      "resist": {
+        "physical": 0.25
+      },
+      "aggro_range": 80,
+      "knockback_mult": 0.25
+    },
+    "frost_slime": {
+      "name": "Frost Slime",
+      "shape": "slime",
+      "level": 21,
+      "hp": 130,
+      "touch_damage": 26,
+      "xp": 203,
+      "speed": 50,
+      "hop_velocity": 190,
+      "color": "#bfe8ff",
+      "size": [
+        20,
+        14
+      ],
+      "resist": {
+        "frost": 0.75
+      }
+    },
+    "skeleton": {
+      "name": "Skeleton",
+      "shape": "skeleton",
+      "level": 24,
+      "hp": 170,
+      "touch_damage": 32,
+      "xp": 280,
+      "speed": 65,
+      "hop_velocity": 0,
+      "color": "#e8e2d0",
+      "size": [
+        14,
+        24
+      ],
+      "resist": {
+        "poison": 0.75
+      },
+      "aggro_range": 130
+    },
+    "ice_golem": {
+      "name": "Ice Golem",
+      "shape": "golem",
+      "level": 28,
+      "hp": 330,
+      "touch_damage": 40,
+      "xp": 580,
+      "speed": 25,
+      "hop_velocity": 0,
+      "color": "#8fc9ef",
+      "size": [
+        26,
+        28
+      ],
+      "resist": {
+        "frost": 0.75,
+        "physical": 0.25
+      },
+      "aggro_range": 90,
+      "knockback_mult": 0.25
     }
   },
   "respawn_time": 6.0,
@@ -198,6 +379,19 @@
       "chain_range": 80,
       "chain_falloff": 0.75,
       "color": "#ffe66b"
+    },
+    "heal": {
+      "name": "Heal",
+      "element": "holy",
+      "key": "H",
+      "kind": "heal",
+      "mp": 8,
+      "cooldown": 3.0,
+      "heal_min": 14,
+      "heal_max": 18,
+      "heal_per_level": 4,
+      "range": 160,
+      "color": "#9dffb0"
     }
   },
   "elements": {
@@ -232,6 +426,100 @@
     },
     "physical": {
       "color": "#ffffff"
+    },
+    "holy": {
+      "color": "#9dffb0"
     }
-  }
+  },
+  "mob_scaling": {
+    "_doc": "stat(level) = type stat * curve(level) / curve(type level). hp tracks player damage growth, damage tracks player hp growth.",
+    "hp_per_level": 0.23,
+    "damage_per_level": 0.24,
+    "xp_exponent": 1.3,
+    "level_spread": 1,
+    "xp_grace_levels": 3,
+    "xp_penalty_per_level": 0.15,
+    "xp_min_mult": 0.1,
+    "xp_bonus_per_level": 0.05,
+    "xp_max_mult": 1.3,
+    "_doc_xp": "Listed xp follows 4 * level^1.3 * (hp / normal hp at that level), so XP per second of fighting stays level with the player's XP curve."
+  },
+  "party": {
+    "_doc": "XP from a kill is split between party members on the map: each gets xp * (1 + bonus * (members - 1)) / members.",
+    "xp_bonus_per_member": 0.2,
+    "follow_leash": 220,
+    "engage_radius": 260,
+    "respawn_time": 5.0,
+    "heal_below": 0.65
+  },
+  "sim_roles": {
+    "tank": {
+      "label": "Tank",
+      "weapon": "iron_hammer",
+      "spells": [],
+      "hp_mult": 1.8,
+      "follow_offset": 36,
+      "color": "#5b8fe0"
+    },
+    "healer": {
+      "label": "Healer",
+      "weapon": "short_sword",
+      "spells": [
+        "heal",
+        "frost_bolt"
+      ],
+      "hp_mult": 1.0,
+      "follow_offset": -44,
+      "color": "#7fe39b"
+    },
+    "ranged": {
+      "label": "Ranged",
+      "weapon": "throwing_kunai",
+      "spells": [
+        "fireball",
+        "venom_glob"
+      ],
+      "hp_mult": 0.9,
+      "follow_offset": -20,
+      "color": "#ffb347"
+    }
+  },
+  "sims": [
+    {
+      "name": "Brannoc",
+      "role": "tank",
+      "look": {
+        "skin": "#e0a878",
+        "hair": "#2b1d14",
+        "hair_style": "short",
+        "shirt": "#3f5f9f",
+        "pants": "#2c3346",
+        "hat": "helm"
+      }
+    },
+    {
+      "name": "Liriel",
+      "role": "healer",
+      "look": {
+        "skin": "#f6d2b0",
+        "hair": "#f2e2a0",
+        "hair_style": "long",
+        "shirt": "#e8f0e0",
+        "pants": "#6b8f6b",
+        "hat": ""
+      }
+    },
+    {
+      "name": "xXKunaiXx",
+      "role": "ranged",
+      "look": {
+        "skin": "#c68a5a",
+        "hair": "#c43b3b",
+        "hair_style": "spiky",
+        "shirt": "#2f2f38",
+        "pants": "#46304f",
+        "hat": "band"
+      }
+    }
+  ]
 }

@@ -4,13 +4,13 @@ extends Control
 
 var player: Player
 var world: World
-var map_name := "Mossy Meadow"
 var _hint_time := 8.0
 var show_help := true
 const HELP_LINES := [
 	"Move: Arrows / WASD    Jump: Alt / Space    Attack: Ctrl / J",
 	"Drop down: Down + Jump    Auto-battle: Q / Tab    Weapons: 1-4 or E",
 	"Spells: Z Fire   X Frost   C Venom   V Lightning",
+	"Portal: stand on it + Up    Party on/off: P",
 	"Respawn mobs: F5    Debug: F3    Hide this: F1",
 ]
 var _font: Font
@@ -77,16 +77,56 @@ func _draw() -> void:
 	_draw_skill_bar(vs)
 	if player.auto_battle:
 		_text(Vector2(vs.x / 2.0 - 30, 16), "AUTO BATTLE", Color("#ffd84a"), 11)
-	# Map name, top left
+	# Map name and level range, top left
+	var map_name: String = world.map.get("name", "") if world else ""
+	var x := 8 + _font.get_string_size(map_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 8
 	_text(Vector2(8, 16), map_name, Color("#e8f3ff"), 11)
-	_text(Vector2(8 + _font.get_string_size(map_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 10, 16), "Kills %d" % player.kills, Color("#cfd8e3"), 9)
+	var lv := world.level_label() if world else ""
+	_text(Vector2(x, 16), lv, Color("#ffd84a"), 9)
+	x += _font.get_string_size(lv, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x + 8
+	_text(Vector2(x, 16), "Kills %d" % player.kills, Color("#cfd8e3"), 9)
+	_draw_portal_hint(vs)
+	var party_bottom := _draw_party(vs)
 	# Controls panel: stays on screen, F1 hides or shows it.
 	if show_help:
 		_draw_help()
 	if Log.debug:
-		_draw_debug(vs)
+		_draw_debug(vs, party_bottom)
 
-func _draw_debug(vs: Vector2) -> void:
+## Standing on a portal: say where it goes, just above the bottom bar.
+func _draw_portal_hint(vs: Vector2) -> void:
+	if world == null:
+		return
+	var p := world.portal_at(player.global_position)
+	if p.is_empty():
+		return
+	var dest: Dictionary = world.maps.get(String(p.to), {})
+	var lv: Array = dest.get("levels", [])
+	var msg := "Up: Enter %s%s" % [dest.get("name", p.to), (" (Lv %d-%d)" % [lv[0], lv[1]]) if lv.size() == 2 else ""]
+	var w := _font.get_string_size(msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+	_text(Vector2((vs.x - w) / 2.0, vs.y - 30), msg, Color("#bfe6ff"), 10)
+
+## Party frames, top right: name, level, role color, HP bar. Returns the y below them.
+func _draw_party(vs: Vector2) -> float:
+	var y := 8.0
+	if world == null:
+		return y
+	for m in world.party:
+		if m == player or not is_instance_valid(m):
+			continue
+		var x := vs.x - 108.0
+		var down: bool = not m.is_alive()
+		var label := "%s Lv.%d" % [m.display_name, m.level]
+		_text(Vector2(x, y + 8), label, Color(0.6, 0.6, 0.6) if down else m.tag_color, 8)
+		var r := Rect2(x, y + 11, 100, 4)
+		draw_rect(r, Color(0, 0, 0, 0.6))
+		draw_rect(Rect2(r.position, Vector2(r.size.x * clampf(float(m.hp) / m.max_hp, 0.0, 1.0), r.size.y)), Color("#e04848"))
+		if down:
+			_text(Vector2(x + 70, y + 8), "KO", Color("#ff6b6b"), 8)
+		y += 19.0
+	return y
+
+func _draw_debug(vs: Vector2, y0 := 16.0) -> void:
 	var alive := 0
 	for m in world.mobs:
 		if m.alive:
@@ -101,7 +141,7 @@ func _draw_debug(vs: Vector2) -> void:
 		"mobs alive %d / %d" % [alive, world.mobs.size()],
 		"view %dx%d" % [vs.x, vs.y],
 	]
-	var y := 16.0
+	var y := maxf(y0 + 8.0, 16.0)
 	for l in lines:
 		_text(Vector2(vs.x - 120, y), l, Color("#7fe3ff"), 9)
 		y += 11.0

@@ -30,8 +30,11 @@ var _auto_min_y := 9999.0
 
 func _initialize() -> void:
 	_log = root.get_node("Log")
-	seed(1337)
+	# SIMMO_SEED=n runs with another seed, to shake out flaky checks.
+	var env_seed := OS.get_environment("SIMMO_SEED")
+	seed(int(env_seed) if env_seed != "" else 1337)
 	_main = load("res://main.tscn").instantiate()
+	_main.spawn_sims = false  # solo: these checks count the player's own kills
 	root.add_child(_main)
 
 func _check(cond: bool, msg: String) -> void:
@@ -143,7 +146,7 @@ func _physics_process(_delta: float) -> bool:
 		"resume":
 			# After letting go, auto must pick a target from the new spot within half a second.
 			if _phase_frame == 30:
-				var t = player._auto_target
+				var t = player.brain.target
 				_check(t != null and t.alive and (absf(player.velocity.x) > 1.0 or player._swing_time > 0.0),
 					"auto-battle resumes within 0.5s of letting go (target %s, vx %.0f)" % [str(t.id) if t else "none", player.velocity.x])
 				# Steering by hand with a mob right in front: auto keeps swinging.
@@ -155,6 +158,9 @@ func _physics_process(_delta: float) -> bool:
 				m.max_hp = 99999
 				m.hp = 99999
 				m.set_physics_process(false)
+				# On the ground, so the check doesn't depend on where auto-battle was mid-jump.
+				player.position = Vector2(700, 330)
+				player.velocity = Vector2.ZERO
 				player.facing = 1
 				m.global_position = player.global_position + Vector2(14, 0)
 				_swings_start = player.swings
@@ -187,8 +193,9 @@ func _physics_process(_delta: float) -> bool:
 					player.attack()
 		"respawn":
 			if _phase_frame == 1:
+				# Count right away: a swing still winding up from the fight phase can kill a fresh slime.
+				player._pending_hit = -1.0
 				world.respawn_all()
-			if _phase_frame == 5:
 				var alive := 0
 				for m in world.mobs:
 					if m.alive:
@@ -217,11 +224,11 @@ func _physics_process(_delta: float) -> bool:
 func _check_reachability(world, player) -> void:
 	var cfg: Dictionary = player.cfg
 	var max_up: float = pow(float(cfg.jump_velocity), 2) / (2.0 * float(cfg.gravity))
-	var surfaces := [[-40.0, world.GROUND_Y, world.MAP_W + 80.0]]
-	for p in world.PLATFORMS:
+	var surfaces := [[-40.0, world.ground_y, world.map_w + 80.0]]
+	for p in world.platforms:
 		surfaces.append([float(p[0]), float(p[1]), float(p[2])])
 	var bad := []
-	for p in world.PLATFORMS:
+	for p in world.platforms:
 		var ok := false
 		for s in surfaces:
 			if s[1] == float(p[1]) and s[0] == float(p[0]):
@@ -382,7 +389,7 @@ func _test_focus(player, world) -> void:
 	if _phase_frame == 30:
 		player.set_auto_battle(true)
 	if OS.get_environment("NAV_TRACE") == "1" and (_phase_frame % 10 == 0 or _phase_frame < 6) and _phase_frame < 200:
-		var t = player._auto_target
+		var t = player.brain.target
 		print("focus f=%d player=(%.0f,%.0f) wounded=(%.0f,%.0f) fresh=(%.0f,%.0f) target=%s" % [_phase_frame, player.position.x, player.position.y, _wounded.position.x, _wounded.position.y, _fresh.position.x, _fresh.position.y, "wounded" if t == _wounded else ("fresh" if t == _fresh else "none")])
 	if _phase_frame > 30 and (not _wounded.alive or not _fresh.alive or _phase_frame == 900):
 		_check(not _wounded.alive and _fresh.alive, "auto-battle finishes the wounded mob before switching to a fresh one (wounded %s, fresh %s)" % ["dead" if not _wounded.alive else "alive", "dead" if not _fresh.alive else "alive"])
