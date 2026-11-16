@@ -30,7 +30,9 @@
     "mp_regen": 1.5,
     "global_cast_cooldown": 1.0,
     "auto_use_spells": true,
-    "attack_blocks_cast": 0.3
+    "attack_blocks_cast": 0.3,
+    "cast_locks_weapon": 0.4,
+    "thrown_preferred_range": 0.6
   },
   "mobs": {
     "green_slime": {

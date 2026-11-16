@@ -21,6 +21,9 @@ var _kills0 := 0
 var Comb   # res://scripts/combat.gd, loaded at runtime (class names would compile before autoloads)
 var ProjS
 var WorldS
+var _weave_case := 0
+var _swings0 := 0
+var _first_throw := -1
 
 func _initialize() -> void:
 	_log = root.get_node("Log")
@@ -184,7 +187,9 @@ func _physics_process(_d: float) -> bool:
 				_check(pr.element == "frost" and is_equal_approx(float(pr.opts.proc), float(w.imbue_chance)), "kunai imbued with last spell's element (%s, %.0f%% proc)" % [pr.element, 100.0 * float(pr.opts.proc)])
 				p.equip("short_sword")
 				p.imbue_element = ""
-				_goto("auto")
+				_goto("weave")
+		"weave":
+			_test_weave(p)
 		"auto":
 			# Hands-off on the full map: auto-battle should mix in spells and land combos.
 			if _pf == 1:
@@ -210,8 +215,26 @@ func _physics_process(_d: float) -> bool:
 					combos += Comb.combo_counts[k]
 				_check(p.casts - _casts0 >= 10 and p.casts - _casts0 <= 45, "auto-battle casts spells at a sane pace (%d casts in 60s)" % (p.casts - _casts0))
 				_check(p.kills - _kills0 >= 10, "auto-battle still kills steadily with spells (%d kills in 60s)" % (p.kills - _kills0))
-				_check(combos >= 1, "auto-battle sets up combos on its own (%s)" % str(Comb.combo_counts))
 				_check_pacing(p)
+				p.set_auto_battle(false)
+				_goto("combo_auto")
+		"combo_auto":
+			# Tough targets live long enough for combos: auto-battle should go for them.
+			if _pf == 1:
+				_park_all()
+				_dummy(0, Vector2(560, 329), 600)
+				_dummy(1, Vector2(590, 329), 600)
+				p.position = Vector2(470, 330)
+				p.velocity = Vector2.ZERO
+				p.mp = p.max_mp
+				p.equip("short_sword")
+				Comb.combo_counts.clear()
+				p.set_auto_battle(true)
+			if _pf == 1800:
+				var combos := 0
+				for k in Comb.combo_counts:
+					combos += Comb.combo_counts[k]
+				_check(combos >= 2, "auto-battle lands combos on tough targets (%s in 30s)" % str(Comb.combo_counts))
 				p.set_auto_battle(false)
 				_goto("done")
 		"done":
@@ -346,3 +369,43 @@ func _check_pacing(p) -> void:
 	p.mp = p.max_mp
 	p._apply({"dir": 0.0, "jump": false, "jump_release": false, "down": false, "attack": true, "spell": "fireball"}, 1.0 / 60.0)
 	_check(p.swings == b0, "casting blocks a weapon swing in the same moment")
+
+## Auto-battle with spells must still use the weapon: kunai closes in and throws between casts,
+## melee keeps swinging between casts. Reported: kunai user stood at range only casting.
+func _test_weave(p) -> void:
+	var cases := [["throwing_kunai", 350.0], ["short_sword", 250.0]]
+	if _weave_case >= cases.size():
+		p.set_auto_battle(false)
+		p.equip("short_sword")
+		_goto("auto")
+		return
+	var c: Array = cases[_weave_case]
+	if _pf == 1:
+		_park_all()
+		_m = _dummy(0, Vector2(450 + c[1], 329), 5000)
+		p.position = Vector2(450, 330)
+		p.velocity = Vector2.ZERO
+		p.equip(c[0])
+		p.mp = p.max_mp
+		p._cast_cd = 0.0
+		for k in p.spell_cd:
+			p.spell_cd[k] = 0.0
+		_swings0 = p.swings
+		_casts0 = p.casts
+		_first_throw = -1
+		p.set_auto_battle(true)
+	if _first_throw < 0 and p.swings > _swings0:
+		_first_throw = _pf
+	if _pf == 600:
+		var sw: int = p.swings - _swings0
+		var ca: int = p.casts - _casts0
+		var dist: float = absf(_m.position.x - p.position.x)
+		var w: Dictionary = _bal.weapons[c[0]]
+		_check(sw >= 6 and ca >= 3, "auto-battle weaves %s attacks between spells (%d attacks, %d casts in 10s)" % [w.name, sw, ca])
+		_check(_first_throw > 0 and _first_throw <= 150, "auto-battle starts using the %s within 2.5s (first at %.1fs)" % [w.name, _first_throw / 60.0])
+		if w.get("thrown", false):
+			var pref := float(w.range) * float(p.cfg.thrown_preferred_range)
+			_check(dist <= pref + 20.0, "kunai user closes to a comfortable range instead of the edge (%.0f px, aims for %.0f, max %.0f)" % [dist, pref, w.range])
+		p.set_auto_battle(false)
+		_weave_case += 1
+		_pf = 0

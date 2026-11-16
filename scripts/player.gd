@@ -223,16 +223,28 @@ func _auto_think(delta: float) -> Dictionary:
 		return i
 	var x := global_position.x
 	var dx := t.global_position.x - x
-	# Cast whatever spell fits the target's state (works while moving or airborne).
+	var thrown: bool = weapon.get("thrown", false)
+	var t_dy := absf(_mob_surface_y(t) - global_position.y)
+	var weapon_can_hit: bool = thrown and absf(dx) <= float(weapon.range) and t_dy < 90.0
+	# Weave: use the weapon whenever it's ready and in reach, spells in between.
+	var weapon_ready := _attack_cd <= 0.0 and (weapon_can_hit or _mob_in_front())
 	if bool(cfg.get("auto_use_spells", true)):
-		i.spell = _auto_pick_spell(t)
-		if i.spell != "":
+		# Combo finishers (lightning on frozen, fire on stacked poison) beat a weapon swing;
+		# other spells wait until the weapon is busy.
+		var pick := _auto_pick_spell(t)
+		if pick != "" and (not weapon_ready or _is_combo_finisher(pick, t)):
+			i.spell = pick
 			_chase_time = 0.0
-	# Thrown weapons attack from range, any height they can arc to.
-	if weapon.get("thrown", false) and is_on_floor() and absf(dx) <= float(weapon.range) and absf(_mob_surface_y(t) - global_position.y) < 90.0:
+	# Thrown weapons attack from range, any height they can arc to,
+	# and keep closing to a comfortable distance while the throw cools down.
+	if thrown and is_on_floor() and weapon_can_hit:
 		facing = 1 if dx >= 0.0 else -1
-		i.attack = true
-		_chase_time = 0.0
+		if _attack_cd <= 0.0:
+			i.attack = true
+			_chase_time = 0.0
+		var preferred := float(weapon.range) * float(cfg.get("thrown_preferred_range", 0.6))
+		if absf(dx) > preferred and t_dy < 20.0:
+			i.dir = signf(dx)
 		return i
 	# In the air: steer toward where the current move should land.
 	if not is_on_floor():
@@ -291,7 +303,8 @@ func cast(id: String) -> bool:
 	spell_cd[id] = float(sp.cooldown)
 	var gcd := float(cfg.get("global_cast_cooldown", 1.0))
 	_cast_cd = gcd
-	_attack_cd = maxf(_attack_cd, gcd)
+	# Short cast animation locks the weapon; the full global cooldown only applies between spells.
+	_attack_cd = maxf(_attack_cd, float(cfg.get("cast_locks_weapon", 0.4)))
 	imbue_element = String(sp.element)
 	casts += 1
 	cast_log.append([Engine.get_physics_frames(), id])
@@ -390,6 +403,9 @@ func _auto_pick_spell(t: Mob) -> String:
 		if dist <= float(sp.range) and dy <= max_dy:
 			return id
 	return ""
+
+func _is_combo_finisher(id: String, t: Mob) -> bool:
+	return (id == "chain_lightning" and t.is_frozen()) or (id == "fireball" and t.poison_stacks >= 3)
 
 func _mob_surface_y(m: Mob) -> float:
 	return m.global_position.y if m.is_on_floor() else m.home.y

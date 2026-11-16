@@ -58,7 +58,7 @@ Needs Godot 4.7 or newer: `brew install --cask godot`
 | Lightning on a frozen target (conduct) | Always crits, splashes 60% damage to mobs within 50 px, shatters the ice |
 | Fire on a poisoned target (ignite) | Poison bursts for 7 per stack to everything within 44 px |
 
-  Frozen mobs can't move or hurt you by touch. Auto-battle uses spells too and sets up combos (freeze then lightning, stack poison then fire). Statuses show as pips above each mob.
+  Frozen mobs can't move or hurt you by touch. Auto-battle uses spells too and sets up combos (freeze then lightning, stack poison then fire), weaving them between weapon attacks. Spells share a 1 s global cooldown; a cast locks the weapon for 0.4 s. With the kunai it closes to about 60% of max range and keeps moving in while the throw cools down. Statuses show as pips above each mob.
 - Crits, knockback and floating damage numbers
 - Three mob types (Green Slime, Blue Slime, Grumpy Stump) that wander, aggro when hit and respawn. Knockback stops at the edge of their platform, MapleStory style
 - Auto-battle: runs to the nearest reachable enemy, jumps up or drops down to its platform and attacks. Moving by hand takes over movement while auto keeps swinging at anything in front of you; 0.4 s after you let go it picks the nearest mob from where you are. It routes with a navigation graph (`scripts/nav.gd`): jump up, jump across gaps, walk off edges or drop through, picking the shortest real route and the nearest mob by travel distance. Once it has hit a mob it stays on it until it dies, and it finishes wounded mobs (like the extras a hammer swing clips) before starting on fresh ones. It gives up on a mob it can't reach after 5 s
