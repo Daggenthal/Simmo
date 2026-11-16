@@ -24,7 +24,12 @@
     "attack_speed_scale": 1.0,
     "auto_give_up_time": 5.0,
     "auto_wounded_bonus": 150.0,
-    "auto_stick_bonus": 40.0
+    "auto_stick_bonus": 40.0,
+    "max_mp": 40,
+    "mp_per_level": 5,
+    "mp_regen": 3.0,
+    "global_cast_cooldown": 0.35,
+    "auto_use_spells": true
   },
   "mobs": {
     "green_slime": {
@@ -113,6 +118,117 @@
       "max_targets": 4,
       "length": 22,
       "color": "#8a8f99"
+    },
+    "throwing_kunai": {
+      "name": "Throwing Kunai",
+      "speed_label": "Normal",
+      "cooldown": 0.7,
+      "windup": 0.05,
+      "damage_min": 15,
+      "damage_max": 21,
+      "range": 170,
+      "height": 20,
+      "knockback": 50,
+      "max_targets": 1,
+      "length": 8,
+      "color": "#c0c8d0",
+      "thrown": true,
+      "throw_speed": 160,
+      "gravity": 700,
+      "imbue_chance": 0.5,
+      "imbue_strength": 0.5
+    }
+  },
+  "spells": {
+    "fireball": {
+      "name": "Fireball",
+      "element": "fire",
+      "key": "Z",
+      "kind": "bolt",
+      "mp": 6,
+      "cooldown": 1.2,
+      "damage_min": 9,
+      "damage_max": 13,
+      "speed": 240,
+      "range": 180,
+      "color": "#ff7a2e"
+    },
+    "frost_bolt": {
+      "name": "Frost Bolt",
+      "element": "frost",
+      "key": "X",
+      "kind": "bolt",
+      "mp": 6,
+      "cooldown": 1.0,
+      "damage_min": 8,
+      "damage_max": 11,
+      "speed": 220,
+      "range": 180,
+      "color": "#8fd8ff"
+    },
+    "venom_glob": {
+      "name": "Venom Glob",
+      "element": "poison",
+      "key": "C",
+      "kind": "lob",
+      "mp": 5,
+      "cooldown": 0.9,
+      "damage_min": 4,
+      "damage_max": 6,
+      "speed": 150,
+      "gravity": 650,
+      "range": 160,
+      "splash": 22,
+      "color": "#7ed957"
+    },
+    "chain_lightning": {
+      "name": "Chain Lightning",
+      "element": "lightning",
+      "key": "V",
+      "kind": "chain",
+      "mp": 12,
+      "cooldown": 2.5,
+      "damage_min": 14,
+      "damage_max": 19,
+      "range": 150,
+      "chains": 3,
+      "chain_range": 80,
+      "chain_falloff": 0.75,
+      "color": "#ffe66b"
+    }
+  },
+  "elements": {
+    "fire": {
+      "burn_dps": 4,
+      "burn_time": 4.0,
+      "thaws": true,
+      "ignite_per_stack": 7,
+      "ignite_radius": 44,
+      "color": "#ff9b4a"
+    },
+    "frost": {
+      "slow": 0.45,
+      "slow_time": 3.0,
+      "freeze_chance": 0.25,
+      "freeze_time": 2.0,
+      "crit_bonus_vs_frozen": 0.5,
+      "color": "#9fe0ff"
+    },
+    "poison": {
+      "dps_per_stack": 2,
+      "max_stacks": 5,
+      "time": 6.0,
+      "color": "#8ee36b"
+    },
+    "lightning": {
+      "frozen_always_crits": true,
+      "frozen_splash_radius": 50,
+      "frozen_splash_mult": 0.6,
+      "shatters_ice": true,
+      "color": "#ffe66b"
+    },
+    "physical": {
+      "color": "#ffffff"
     }
   }
 }

@@ -13,7 +13,12 @@ const BINDINGS := {
 	"weapon_1": [KEY_1],
 	"weapon_2": [KEY_2],
 	"weapon_3": [KEY_3],
+	"weapon_4": [KEY_4],
 	"weapon_next": [KEY_E],
+	"spell_1": [KEY_Z],
+	"spell_2": [KEY_X],
+	"spell_3": [KEY_C],
+	"spell_4": [KEY_V],
 	"debug_toggle": [KEY_F3],
 	"respawn_mobs": [KEY_F5],
 }
@@ -27,6 +32,10 @@ const PAD_BUTTONS := {
 	"move_down": [JOY_BUTTON_DPAD_DOWN],
 	"auto_battle": [JOY_BUTTON_Y],
 	"weapon_next": [JOY_BUTTON_RIGHT_SHOULDER],
+	"spell_1": [JOY_BUTTON_B],
+	"spell_2": [JOY_BUTTON_LEFT_SHOULDER],
+	"spell_3": [JOY_BUTTON_LEFT_STICK],
+	"spell_4": [JOY_BUTTON_RIGHT_STICK],
 	"debug_toggle": [JOY_BUTTON_BACK],
 }
 

@@ -57,23 +57,27 @@ func _draw() -> void:
 	draw_rect(Rect2(0, vs.y - bar_h, vs.x, bar_h), Color(0.08, 0.09, 0.14, 0.85))
 	_text(Vector2(8, vs.y - 7), "Lv. %d" % player.level, Color("#ffd84a"), 11)
 	var hp_frac := float(player.hp) / player.max_hp
-	_bar(Rect2(52, vs.y - 17, 150, 11), hp_frac, Color("#e04848"), "HP %d / %d" % [player.hp, player.max_hp])
+	_bar(Rect2(46, vs.y - 17, 110, 11), hp_frac, Color("#e04848"), "HP %d / %d" % [player.hp, player.max_hp])
+	_bar(Rect2(160, vs.y - 17, 100, 11), player.mp / player.max_mp, Color("#4a8be0"), "MP %d / %d" % [int(player.mp), player.max_mp])
 	var need := player.xp_to_next()
-	_bar(Rect2(210, vs.y - 17, 150, 11), float(player.xp) / need, Color("#e8c34a"),
-		"XP %d / %d  (%.1f%%)" % [player.xp, need, 100.0 * player.xp / need])
-	_text(Vector2(vs.x - 110, vs.y - 7), "Kills %d" % player.kills, Color("#cfd8e3"), 9)
+	_bar(Rect2(264, vs.y - 17, 110, 11), float(player.xp) / need, Color("#e8c34a"),
+		"XP %.1f%%" % (100.0 * player.xp / need))
 	var spd_col: Color = {"Fast": Color("#7fe39b"), "Normal": Color("#e8f3ff"), "Slow": Color("#ffb347")}.get(player.weapon.speed_label, Color.WHITE)
-	_text(Vector2(368, vs.y - 7), "%s" % player.weapon.name, Color("#e8f3ff"), 9)
-	_text(Vector2(368 + _font.get_string_size(player.weapon.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x + 6, vs.y - 7), player.weapon.speed_label, spd_col, 9)
+	_text(Vector2(380, vs.y - 7), player.weapon.name, Color("#e8f3ff"), 9)
+	_text(Vector2(380 + _font.get_string_size(player.weapon.name, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x + 5, vs.y - 7), player.weapon.speed_label, spd_col, 9)
+	if player.weapon.get("thrown", false) and player.imbue_element != "":
+		_text(Vector2(vs.x - 96 - _font.get_string_size("Imbued: " + player.imbue_element.capitalize(), HORIZONTAL_ALIGNMENT_LEFT, -1, 8).x, vs.y - 30), "Imbued: %s" % player.imbue_element.capitalize(), Combat.element_color(player.imbue_element), 8)
+	_draw_skill_bar(vs)
 	if player.auto_battle:
 		_text(Vector2(vs.x / 2.0 - 30, 16), "AUTO BATTLE", Color("#ffd84a"), 11)
 	# Map name, top left
 	_text(Vector2(8, 16), map_name, Color("#e8f3ff"), 11)
+	_text(Vector2(8 + _font.get_string_size(map_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 10, 16), "Kills %d" % player.kills, Color("#cfd8e3"), 9)
 	# Controls hint fades out
 	if _hint_time > 0.0:
 		var a := clampf(_hint_time / 2.0, 0.0, 1.0)
 		_text(Vector2(8, 32), "Move: Arrows / WASD   Jump: Alt / Space   Attack: Ctrl / J", Color(1, 1, 1, a), 9)
-		_text(Vector2(8, 44), "Drop down: Down + Jump   Auto: Q / Tab   Weapons: 1 2 3 / E   Debug: F3", Color(1, 1, 1, a), 9)
+		_text(Vector2(8, 44), "Down + Jump: drop   Auto: Q / Tab   Weapons: 1-4 / E   Spells: Z X C V   Debug: F3", Color(1, 1, 1, a), 9)
 	if Log.debug:
 		_draw_debug(vs)
 
@@ -97,3 +101,26 @@ func _draw_debug(vs: Vector2) -> void:
 		_text(Vector2(vs.x - 120, y), l, Color("#7fe3ff"), 9)
 		y += 11.0
 	# Hit boxes in world space are drawn by main.gd when debug is on.
+
+## Four spell slots above the bottom bar: key, element color, cooldown sweep, dim when out of MP.
+func _draw_skill_bar(vs: Vector2) -> void:
+	var size := 18.0
+	var gap := 4.0
+	var keys: Array = player.spells.keys()
+	# Bottom-right, above the bar: the camera keeps the player centered, so the middle stays clear.
+	var x0 := vs.x - 6.0 - (keys.size() * (size + gap) - gap)
+	var y := vs.y - 22.0 - size - 4.0
+	for n in keys.size():
+		var id: String = keys[n]
+		var sp: Dictionary = player.spells[id]
+		var r := Rect2(x0 + n * (size + gap), y, size, size)
+		var col := Color(sp.color)
+		var usable := player.mp >= float(sp.mp)
+		draw_rect(r, Color(0, 0, 0, 0.6))
+		draw_rect(r.grow(-3), col if usable else col.darkened(0.6))
+		var cd: float = player.spell_cd[id]
+		if cd > 0.0:
+			var frac := cd / float(sp.cooldown)
+			draw_rect(Rect2(r.position, Vector2(size, size * frac)), Color(0, 0, 0, 0.6))
+		draw_rect(r, Color(1, 1, 1, 0.4), false, 1.0)
+		_text(r.position + Vector2(2, 9), String(sp.key), Color.WHITE, 8)

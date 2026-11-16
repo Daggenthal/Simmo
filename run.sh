@@ -48,9 +48,12 @@ case "${1:-play}" in
 	debug)  SIMMO_DEBUG=1 exec "$GODOT_BIN" --path . -- --debug-game ;;
 	editor) exec "$GODOT_BIN" --editor --path . ;;
 	test)
-		"$GODOT_BIN" --headless --fixed-fps 60 --path . --script res://tests/smoke_test.gd
-		code=$?
-		if [[ $code -eq 0 ]]; then echo "${GREEN}Smoke test passed${RESET}"; else echo "${RED}Smoke test failed (exit $code)${RESET}"; fi
+		code=0
+		for t in smoke_test magic_test; do
+			"$GODOT_BIN" --headless --fixed-fps 60 --path . --script "res://tests/$t.gd"
+			c=$?
+			if [[ $c -eq 0 ]]; then echo "${GREEN}$t passed${RESET}"; else echo "${RED}$t failed (exit $c)${RESET}"; code=1; fi
+		done
 		exit $code ;;
 	*) echo "${YELLOW}Unknown command '$1'.${RESET} Use: play, debug, editor, test"; exit 2 ;;
 esac

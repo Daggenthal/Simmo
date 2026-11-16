@@ -110,6 +110,7 @@ func _physics_process(_delta: float) -> bool:
 			# Only one mob left alive, up on a platform: auto-battle must climb to it.
 			var high = null
 			if _phase_frame == 1:
+				player.cfg.auto_use_spells = false  # movement tests: no ranged shortcuts
 				for m in world.mobs:
 					if m.home.y < 300.0 and high == null:
 						high = m

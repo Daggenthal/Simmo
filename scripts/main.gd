@@ -15,6 +15,7 @@ func _ready() -> void:
 	if balance.is_empty():
 		Log.crash("Could not load %s, cannot start" % BALANCE_PATH)
 		return
+	Combat.setup(balance)
 	_build_sky()
 	world = World.new()
 	world.name = "World"
@@ -23,7 +24,7 @@ func _ready() -> void:
 
 	player = Player.new()
 	player.name = "Player"
-	player.setup(balance.player, world.spawn_point, balance.weapons)
+	player.setup(balance.player, world.spawn_point, balance.weapons, balance.get("spells", {}))
 	player.world = world
 	world.add_child(player)
 
@@ -100,6 +101,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		player.equip("short_sword")
 	elif event.is_action_pressed("weapon_3"):
 		player.equip("iron_hammer")
+	elif event.is_action_pressed("weapon_4"):
+		player.equip("throwing_kunai")
 	elif event.is_action_pressed("weapon_next"):
 		var keys: Array = balance.weapons.keys()
 		player.equip(keys[(keys.find(player.weapon_key) + 1) % keys.size()])
